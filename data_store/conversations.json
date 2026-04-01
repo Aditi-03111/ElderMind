@@ -25,6 +25,38 @@
         "festival": "",
         "tithi": ""
       }
+    },
+    {
+      "id": "c633ddb0-6388-477b-8db6-6bc2ee06c911",
+      "ts": "2026-04-01T11:36:10.455345+00:00",
+      "text_input": "hello",
+      "ai_response": "Haan, main sun raha hoon. Aap araam se boliye.",
+      "mood": "okay",
+      "emotion": "neutral",
+      "health_logs": [],
+      "mood_logs": [],
+      "alerts": [],
+      "context": {
+        "weather": "32°C, few clouds, Bengaluru",
+        "festival": "",
+        "tithi": ""
+      }
+    },
+    {
+      "id": "888bb166-59fc-40f5-b4b3-58af483ec709",
+      "ts": "2026-04-01T11:38:02.591759+00:00",
+      "text_input": "frontend connected test",
+      "ai_response": "Haan, main sun raha hoon. Aap araam se boliye.",
+      "mood": "okay",
+      "emotion": "neutral",
+      "health_logs": [],
+      "mood_logs": [],
+      "alerts": [],
+      "context": {
+        "weather": "unknown",
+        "festival": "",
+        "tithi": ""
+      }
     }
   ]
 }

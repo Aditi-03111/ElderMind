@@ -14,7 +14,8 @@ app = FastAPI(title="ElderMind Gateway", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"] if settings.cors_allow_origins == "*" else settings.cors_allow_origins.split(","),
-    allow_credentials=True,
+    # We don't use cookie-based auth; disabling credentials makes wildcard CORS safe for local dev.
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
