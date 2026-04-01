@@ -65,7 +65,7 @@ async def transcribe_audio_bytes(
     *,
     filename: str | None = None,
     elevenlabs_api_key: str | None = None,
-    elevenlabs_model_id: str = "scribe_v2",
+    elevenlabs_model_id: str = "scribe_v1",
 ) -> STTResult:
     if elevenlabs_api_key:
         try:
