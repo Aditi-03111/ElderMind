@@ -887,6 +887,44 @@
         "festival": "",
         "tithi": ""
       }
+    },
+    {
+      "id": "960acf3c-e69b-49e6-ad0a-d025efffb97f",
+      "ts": "2026-04-01T17:56:40.664500+00:00",
+      "text_input": "Paani to pee liya?",
+      "ai_response": "Ramesh ji, main sun raha hoon. Aap aaraam se boliye.",
+      "mood": "okay",
+      "emotion": "neutral",
+      "health_logs": [],
+      "mood_logs": [
+        "okay"
+      ],
+      "alerts": [],
+      "source": "voice",
+      "context": {
+        "weather": "unknown",
+        "festival": "",
+        "tithi": ""
+      }
+    },
+    {
+      "id": "9d68970b-dc35-493c-99a3-f34f9da9899b",
+      "ts": "2026-04-01T17:56:48.387179+00:00",
+      "text_input": "Ek sundar doha sunna chahenge?",
+      "ai_response": "Ramesh, काळजी करू नका. आपण हळूहळू पाहू.",
+      "mood": "anxious",
+      "emotion": "neutral",
+      "health_logs": [],
+      "mood_logs": [
+        "anxious"
+      ],
+      "alerts": [],
+      "source": "voice",
+      "context": {
+        "weather": "unknown",
+        "festival": "",
+        "tithi": ""
+      }
     }
   ],
   "lang-smoke": [
