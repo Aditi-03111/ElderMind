@@ -3,16 +3,21 @@ import { gsap } from 'gsap'
 
 export function MicButton({
   speaking,
+  busy,
   onToggle,
 }: {
   speaking: boolean
+  busy?: boolean
   onToggle: () => void
 }) {
   const rootRef = useRef<HTMLButtonElement | null>(null)
   const ringRef = useRef<HTMLDivElement | null>(null)
   const waveRef = useRef<HTMLDivElement | null>(null)
 
-  const label = useMemo(() => (speaking ? 'Listening… tap to stop' : 'Tap to speak'), [speaking])
+  const label = useMemo(() => {
+    if (busy) return 'Working…'
+    return speaking ? 'Listening… tap to stop' : 'Tap to speak'
+  }, [speaking, busy])
 
   useLayoutEffect(() => {
     const root = rootRef.current
@@ -47,6 +52,11 @@ export function MicButton({
         waveTl.timeScale(0.9)
       }
 
+      if (busy) {
+        gsap.to(root, { scale: 0.985, duration: 0.25, yoyo: true, repeat: -1, ease: 'sine.inOut' })
+        waveTl.timeScale(0.65)
+      }
+
       return () => {
         breathe.kill()
         float.kill()
@@ -55,17 +65,19 @@ export function MicButton({
     }, root)
 
     return () => ctx.revert()
-  }, [speaking])
+  }, [speaking, busy])
 
   return (
     <div className="flex flex-col items-center justify-center py-2">
       <button
         ref={rootRef}
         onClick={onToggle}
+        disabled={busy}
         className={[
           'no-tap-highlight relative grid h-[156px] w-[156px] place-items-center rounded-full',
           'shadow-float ring-1 ring-black/10',
           'bg-gradient-to-br from-white/80 to-white/50',
+          busy ? 'opacity-80' : '',
         ].join(' ')}
         aria-pressed={speaking}
         aria-label={label}
@@ -105,9 +117,15 @@ export function MicButton({
           />
         </svg>
       </button>
-      <p className="mt-3 text-base font-semibold text-ink/75">{speaking ? 'Listening…' : 'Tap and speak'}</p>
+      <p className="mt-3 text-base font-semibold text-ink/75">
+        {busy ? 'Thinking…' : speaking ? 'Listening…' : 'Tap and speak'}
+      </p>
       <p className="mt-1 max-w-[28ch] text-center text-sm text-ink/60">
-        {speaking ? 'I’m here. Take your time.' : 'Ask anything — medicines, mood, or just chat.'}
+        {busy
+          ? 'One moment — I’m preparing a gentle reply.'
+          : speaking
+            ? 'I’m here. Take your time.'
+            : 'Ask anything — medicines, mood, or just chat.'}
       </p>
     </div>
   )

@@ -4,16 +4,27 @@ import { AppShell } from '../ui/AppShell'
 import { Card } from '../ui/Card'
 import { PressableButton } from '../ui/Pressable'
 import { SparkleSticker } from '../ui/stickers'
-
-const mood = [0.7, 0.8, 0.65, 0.78, 0.83, 0.76, 0.81]
+import { getWeeklyReport } from '../lib/api'
 
 export function SummaryPage() {
   const [loading, setLoading] = useState(true)
+  const [report, setReport] = useState<any>(null)
+  const [error, setError] = useState('')
   const barsRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
-    const t = window.setTimeout(() => setLoading(false), 900)
-    return () => window.clearTimeout(t)
+    ;(async () => {
+      try {
+        setLoading(true)
+        setError('')
+        const r = await getWeeklyReport('demo')
+        setReport(r)
+      } catch (e: any) {
+        setError(e?.message || 'Failed to load report')
+      } finally {
+        window.setTimeout(() => setLoading(false), 450)
+      }
+    })()
   }, [])
 
   useLayoutEffect(() => {
@@ -28,6 +39,8 @@ export function SummaryPage() {
     }, el)
     return () => ctx.revert()
   }, [loading])
+
+  const moodBars = [0.7, 0.8, 0.65, 0.78, 0.83, 0.76, 0.81]
 
   return (
     <AppShell title="Weekly" subtitle="A soft summary you can trust.">
@@ -50,9 +63,11 @@ export function SummaryPage() {
                 <div key={i} className="h-16 rounded-xl2 bg-ink/5 animate-pulse" />
               ))}
             </div>
+          ) : error ? (
+            <p className="mt-3 text-sm font-semibold text-danger">{error}</p>
           ) : (
             <div ref={barsRef} className="mt-3 grid grid-cols-7 items-end gap-2">
-              {mood.map((m, i) => (
+              {moodBars.map((m, i) => (
                 <div
                   key={i}
                   data-bar
@@ -74,17 +89,23 @@ export function SummaryPage() {
         <div className="mt-3 grid grid-cols-2 gap-2">
           <div className="rounded-2xl bg-white/70 p-3 shadow-soft ring-1 ring-black/5">
             <p className="text-xs font-bold tracking-wide text-ink/60">Medicines</p>
-            <p className="mt-1 text-2xl font-extrabold tracking-tight text-ink">95%</p>
+            <p className="mt-1 text-2xl font-extrabold tracking-tight text-ink">
+              {report?.medicine_adherence ?? 95}%
+            </p>
             <p className="mt-1 text-sm text-ink/60">Great routine.</p>
           </div>
           <div className="rounded-2xl bg-white/70 p-3 shadow-soft ring-1 ring-black/5">
             <p className="text-xs font-bold tracking-wide text-ink/60">Activity</p>
-            <p className="mt-1 text-2xl font-extrabold tracking-tight text-ink">4.2k</p>
+            <p className="mt-1 text-2xl font-extrabold tracking-tight text-ink">
+              {report?.activity_steps_per_day ? `${Math.round(report.activity_steps_per_day / 100) / 10}k` : '4.2k'}
+            </p>
             <p className="mt-1 text-sm text-ink/60">Steps/day.</p>
           </div>
           <div className="rounded-2xl bg-white/70 p-3 shadow-soft ring-1 ring-black/5">
             <p className="text-xs font-bold tracking-wide text-ink/60">Sleep</p>
-            <p className="mt-1 text-2xl font-extrabold tracking-tight text-ink">7.5h</p>
+            <p className="mt-1 text-2xl font-extrabold tracking-tight text-ink">
+              {report?.sleep_hours ?? 7.5}h
+            </p>
             <p className="mt-1 text-sm text-ink/60">Stable.</p>
           </div>
           <div className="rounded-2xl bg-white/70 p-3 shadow-soft ring-1 ring-black/5">
@@ -99,15 +120,15 @@ export function SummaryPage() {
         <p className="text-lg font-extrabold tracking-tight text-ink">Gentle suggestions</p>
         <p className="mt-1 text-sm text-ink/60">Small steps that feel doable.</p>
         <div className="mt-3 grid gap-2">
-          <PressableButton size="lg" variant="soft">
-            10-minute walk after lunch
-          </PressableButton>
-          <PressableButton size="lg" variant="soft">
-            Call a friend for 5 minutes
-          </PressableButton>
-          <PressableButton size="lg" variant="soft">
-            Play a short prayer / story
-          </PressableButton>
+          {(report?.recommendations?.length ? report.recommendations : [
+            '10-minute walk after lunch',
+            'Call a friend for 5 minutes',
+            'Play a short prayer / story',
+          ]).slice(0, 3).map((r: string) => (
+            <PressableButton key={r} size="lg" variant="soft">
+              {r}
+            </PressableButton>
+          ))}
         </div>
       </Card>
     </AppShell>

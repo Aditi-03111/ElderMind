@@ -4,9 +4,12 @@ import { AppShell } from '../ui/AppShell'
 import { Card } from '../ui/Card'
 import { PressableButton } from '../ui/Pressable'
 import { HeartPulseSticker } from '../ui/stickers'
+import { sendSos } from '../lib/api'
 
 export function AlertPage() {
   const [armed, setArmed] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<string>('')
   const buttonRef = useRef<HTMLButtonElement | null>(null)
 
   useLayoutEffect(() => {
@@ -43,7 +46,11 @@ export function AlertPage() {
             variant="danger"
             size="lg"
             className="py-5 text-xl"
-            onClick={() => setArmed(true)}
+            onClick={() => {
+              setResult('')
+              setArmed(true)
+            }}
+            disabled={busy}
           >
             SOS • Call for help
           </PressableButton>
@@ -57,12 +64,32 @@ export function AlertPage() {
                   variant="primary"
                   size="lg"
                   onClick={() => {
-                    setArmed(false)
-                    window.scrollTo({ top: 0, behavior: 'smooth' })
-                    alert('Demo: SOS sent to Kiran. (Hook this to your backend/Twilio)')
+                    ;(async () => {
+                      try {
+                        setBusy(true)
+                        const loc =
+                          'geolocation' in navigator
+                            ? await new Promise<any>((resolve) => {
+                                navigator.geolocation.getCurrentPosition(
+                                  (p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude }),
+                                  () => resolve(undefined),
+                                  { enableHighAccuracy: false, timeout: 2000 },
+                                )
+                              })
+                            : undefined
+                        const res = await sendSos({ user_id: 'demo', reason: 'SOS pressed', location: loc })
+                        setResult(`${res.message} (severity ${res.severity})`)
+                        setArmed(false)
+                        window.scrollTo({ top: 0, behavior: 'smooth' })
+                      } catch (e: any) {
+                        setResult(e?.message || 'SOS failed')
+                      } finally {
+                        setBusy(false)
+                      }
+                    })()
                   }}
                 >
-                  Yes, send
+                  {busy ? 'Sending…' : 'Yes, send'}
                 </PressableButton>
                 <PressableButton variant="soft" size="lg" onClick={() => setArmed(false)}>
                   Cancel
@@ -74,6 +101,12 @@ export function AlertPage() {
               If you’re not sure, you can also ask ElderMind on Home with the microphone.
             </p>
           )}
+
+          {result ? (
+            <div className="rounded-2xl bg-mint/15 p-3 shadow-soft ring-1 ring-black/5">
+              <p className="text-sm font-semibold text-ink">{result}</p>
+            </div>
+          ) : null}
         </div>
       </Card>
 

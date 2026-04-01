@@ -5,9 +5,15 @@ import { Card } from '../ui/Card'
 import { MicButton } from '../ui/MicButton'
 import { PressableButton } from '../ui/Pressable'
 import { ElderSticker, SparkleSticker } from '../ui/stickers'
+import { listenOnce, speak, stopSpeaking } from '../lib/speech'
+import { postVoice } from '../lib/api'
 
 export function HomePage() {
   const [speaking, setSpeaking] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [lastUser, setLastUser] = useState<string>('')
+  const [lastBot, setLastBot] = useState<string>('')
+  const [error, setError] = useState<string>('')
   const stickerRef = useRef<HTMLDivElement | null>(null)
 
   const greeting = useMemo(() => {
@@ -39,6 +45,34 @@ export function HomePage() {
     return () => ctx.revert()
   }, [speaking])
 
+  const runVoice = async () => {
+    setError('')
+    if (busy) return
+
+    if (speaking) {
+      setSpeaking(false)
+      stopSpeaking()
+      return
+    }
+
+    try {
+      setSpeaking(true)
+      const { transcript } = await listenOnce({ lang: 'en-IN', timeoutMs: 9000 })
+      setLastUser(transcript)
+      setSpeaking(false)
+
+      setBusy(true)
+      const res = await postVoice({ user_id: 'demo', text: transcript })
+      setLastBot(res.text)
+      speak(res.text, { lang: 'en-IN', rate: 0.92, pitch: 1.02 })
+    } catch (e: any) {
+      setSpeaking(false)
+      setError(e?.message || 'Something went wrong')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <AppShell title="Home" subtitle={`${greeting}. Want to talk?`}>
       <Card className="pb-2">
@@ -51,7 +85,28 @@ export function HomePage() {
             <ElderSticker className="h-14 w-14" tone="sky" />
           </div>
         </div>
-        <MicButton speaking={speaking} onToggle={() => setSpeaking((s) => !s)} />
+        <MicButton speaking={speaking} busy={busy} onToggle={runVoice} />
+
+        {(lastUser || lastBot || error) && (
+          <div className="mt-3 rounded-2xl bg-white/70 p-3 shadow-soft ring-1 ring-black/5">
+            {error ? (
+              <p className="text-sm font-semibold text-danger">{error}</p>
+            ) : (
+              <>
+                {lastUser ? (
+                  <p className="text-sm text-ink/70">
+                    <span className="font-bold text-ink">You:</span> {lastUser}
+                  </p>
+                ) : null}
+                {lastBot ? (
+                  <p className="mt-2 text-base font-semibold text-ink">
+                    <span className="font-extrabold">ElderMind:</span> {lastBot}
+                  </p>
+                ) : null}
+              </>
+            )}
+          </div>
+        )}
       </Card>
 
       <Card>
