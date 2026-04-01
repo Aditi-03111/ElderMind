@@ -1,3 +1,16 @@
 {
-  "demo": []
+  "demo": [
+    {
+      "id": "4370e3b1-cc22-4b9a-b02d-f2d78835560f",
+      "type": "sos",
+      "severity": 90,
+      "time_created": "2026-04-01T10:43:58.190741+00:00",
+      "message": "Test SOS",
+      "user_id": "demo",
+      "location": {
+        "lat": 12.97,
+        "lon": 77.59
+      }
+    }
+  ]
 }

@@ -9,9 +9,12 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import settings
+from .emotion import infer_emotion_from_audio_bytes
+from .gemini_client import gemini_generate_text
 from .groq_client import groq_chat_completion
 from .markers import parse_markers
 from .prompt_loader import load_system_prompt
+from .stt import transcribe_audio_bytes
 from .tavily_client import tavily_search
 from .tts import synthesize_mp3
 from .weather_client import fetch_openweather_summary
@@ -90,9 +93,30 @@ async def voice(request: Request):
                 lon = None
 
     user_text = (text or "").strip()
-    if not user_text and audio is not None:
-        # Minimal STT fallback: accept audio but tell client to send text unless heavy deps installed.
-        return JSONResponse(status_code=400, content={"status": "error", "message": "Audio provided but STT not enabled. Send text for now."})
+    audio_bytes: bytes | None = None
+    emotion_label = "neutral"
+    if audio is not None:
+        try:
+            audio_bytes = await audio.read()
+        except Exception:
+            audio_bytes = None
+
+    if not user_text and audio_bytes:
+        try:
+            stt = await transcribe_audio_bytes(audio_bytes, filename=audio.filename)
+            user_text = (stt.text or "").strip()
+        except Exception:
+            return JSONResponse(
+                status_code=400,
+                content={"status": "error", "message": "Audio provided but STT not enabled. Install Whisper or send text."},
+            )
+
+    if audio_bytes:
+        try:
+            emo = await infer_emotion_from_audio_bytes(audio_bytes)
+            emotion_label = emo.label or "neutral"
+        except Exception:
+            emotion_label = "neutral"
     if not user_text:
         return JSONResponse(status_code=400, content={"status": "error", "message": "Missing text"})
 
@@ -148,8 +172,17 @@ async def voice(request: Request):
         try:
             raw = await groq_chat_completion(settings.groq_api_key, model=settings.groq_model, system=system, user=user_text)
         except Exception:
-            raw = _fallback_reply(user_text)
+            raw = ""
     else:
+        raw = ""
+
+    if not raw and settings.gemini_api_key:
+        try:
+            raw = await gemini_generate_text(api_key=settings.gemini_api_key, model=settings.gemini_model, system=system, user=user_text)
+        except Exception:
+            raw = ""
+
+    if not raw:
         raw = _fallback_reply(user_text)
     parsed = parse_markers(raw)
 
@@ -157,12 +190,42 @@ async def voice(request: Request):
     mp3_name = synthesize_mp3(parsed.cleaned_text or raw, lang="en" if lang == "en" else "hi", out_dir=settings.media_dir)
     audio_url = f"{settings.base_url}/media/{mp3_name}"
 
+    # Persist conversation + extracted logs (best-effort)
+    try:
+        async with __import__("httpx").AsyncClient(timeout=10) as client:  # avoid new dependency import patterns
+            await client.post(
+                f"{settings.data_service_url}/conversations/{user_id}",
+                json={
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                    "text_input": user_text,
+                    "ai_response": parsed.cleaned_text or raw,
+                    "mood": (parsed.mood_logs[-1] if parsed.mood_logs else "okay"),
+                    "emotion": emotion_label,
+                    "health_logs": parsed.health_logs,
+                    "mood_logs": parsed.mood_logs,
+                    "alerts": parsed.alerts,
+                    "context": {"weather": weather_summary, "festival": festival_today, "tithi": tithi_today},
+                },
+            )
+            for a in parsed.alerts:
+                await client.post(
+                    f"{settings.data_service_url}/alerts/{user_id}",
+                    json={
+                        "time_created": datetime.now(timezone.utc).isoformat(),
+                        "type": "ai_marker",
+                        "message": a,
+                        "severity": 75,
+                    },
+                )
+    except Exception:
+        pass
+
     return {
         "status": "success",
         "text": parsed.cleaned_text or raw,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "mood": (parsed.mood_logs[-1] if parsed.mood_logs else "okay"),
-        "emotion": "neutral",
+        "emotion": emotion_label,
         "alert_sent": bool(parsed.alerts),
         "alert_severity": 75 if parsed.alerts else 0,
         "logs": {

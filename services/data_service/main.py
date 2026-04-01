@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
@@ -50,6 +50,37 @@ async def confirm_med(med_id: str, payload: dict):
     )
     return {"status": "success", "logged": {"med_id": med_id, "status": "taken"}}
 
+
+@app.post("/conversations/{user_id}")
+async def append_conversation(user_id: str, payload: dict):
+    """
+    Append a conversation/log item from ai_service or gateway.
+    """
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Invalid payload")
+    item = store.append_conversation(user_id, payload)
+    return {"status": "success", "item": item}
+
+
+@app.post("/alerts/{user_id}")
+async def append_alert(user_id: str, payload: dict):
+    """
+    Append an alert item.
+    """
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Invalid payload")
+    item = store.append_alert(user_id, payload)
+    return {"status": "success", "item": item}
+
+
+@app.get("/conversations/{user_id}")
+async def list_conversations(user_id: str, limit: int = 20):
+    return {"status": "success", "items": store.list_conversations(user_id, limit=limit)}
+
+
+@app.get("/alerts/{user_id}")
+async def list_alerts(user_id: str, limit: int = 20):
+    return {"status": "success", "items": store.list_alerts(user_id, limit=limit)}
 
 @app.get("/dashboard/{caregiver_id}")
 async def dashboard(caregiver_id: str):

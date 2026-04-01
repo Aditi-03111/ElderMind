@@ -7,6 +7,24 @@
       "ai_response": "logged",
       "mood": "okay",
       "emotion": "neutral"
+    },
+    {
+      "id": "dac79eb1-f548-4372-b401-7a5ab3f9cbf9",
+      "ts": "2026-04-01T10:44:04.458703+00:00",
+      "text_input": "Akela lag raha hai",
+      "ai_response": "Akela lag raha hai na? Main yahin hoon — thodi baat karein.",
+      "mood": "low",
+      "emotion": "neutral",
+      "health_logs": [],
+      "mood_logs": [
+        "low"
+      ],
+      "alerts": [],
+      "context": {
+        "weather": "33°C, few clouds, Bengaluru",
+        "festival": "",
+        "tithi": ""
+      }
     }
   ]
 }

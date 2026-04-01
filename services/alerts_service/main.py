@@ -6,6 +6,7 @@ from uuid import uuid4
 import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from twilio.rest import Client as TwilioClient
 
 from .config import settings
 
@@ -26,11 +27,9 @@ async def health():
 
 
 async def _persist_alert(user_id: str, alert: dict):
-    # Store in data-service local store via a “conversation append” hack for now.
     async with httpx.AsyncClient(timeout=15) as client:
-        # data-service doesn't yet have an alerts endpoint; we can extend later.
         try:
-            await client.post(f"{settings.data_service_url}/medicine/aspirin/confirm", json={"user_id": user_id})
+            await client.post(f"{settings.data_service_url}/alerts/{user_id}", json=alert)
         except Exception:
             pass
 
@@ -54,7 +53,16 @@ async def sos(payload: dict):
     # Twilio is stubbed unless credentials exist.
     sent_to = []
     if settings.twilio_account_sid and settings.twilio_auth_token and settings.twilio_from_phone:
-        sent_to.append("twilio_enabled")
+        try:
+            client = TwilioClient(settings.twilio_account_sid, settings.twilio_auth_token)
+            msg = client.messages.create(
+                from_=settings.twilio_from_phone,
+                to=(payload.get("to") or "").strip() or "+91-9999999999",
+                body=f"ElderMind SOS: {reason} (severity {severity})",
+            )
+            sent_to.append(f"twilio:{msg.sid}")
+        except Exception:
+            sent_to.append("twilio_error")
     else:
         sent_to.append("stub")
 

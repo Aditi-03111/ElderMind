@@ -8,6 +8,7 @@ export type VoiceResponse = {
   timestamp: string
   alert_sent: boolean
   alert_severity: number
+  audio_url?: string
 }
 
 export async function postVoice({
@@ -29,6 +30,30 @@ export async function postVoice({
     body: JSON.stringify({ user_id, text, mood_hint, lat, lon }),
   })
   if (!res.ok) throw new Error(`Voice request failed: ${res.status}`)
+  return (await res.json()) as VoiceResponse
+}
+
+export async function postVoiceAudio({
+  user_id,
+  audio,
+  text,
+  lat,
+  lon,
+}: {
+  user_id: string
+  audio: Blob
+  text?: string
+  lat?: number
+  lon?: number
+}): Promise<VoiceResponse> {
+  const fd = new FormData()
+  fd.set('user_id', user_id)
+  if (text) fd.set('text', text)
+  if (lat != null) fd.set('lat', String(lat))
+  if (lon != null) fd.set('lon', String(lon))
+  fd.set('audio', audio, 'audio.webm')
+  const res = await fetch(`${API_BASE}/voice`, { method: 'POST', body: fd })
+  if (!res.ok) throw new Error(`Voice(audio) request failed: ${res.status}`)
   return (await res.json()) as VoiceResponse
 }
 

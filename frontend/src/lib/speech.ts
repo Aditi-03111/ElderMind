@@ -42,6 +42,12 @@ export function stopSpeaking() {
   window.speechSynthesis.cancel()
 }
 
+export async function playAudioUrl(url: string): Promise<void> {
+  const a = new Audio(url)
+  a.preload = 'auto'
+  await a.play()
+}
+
 export function listenOnce({
   lang = 'en-IN',
   timeoutMs = 9000,

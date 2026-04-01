@@ -5,8 +5,8 @@ import { Card } from '../ui/Card'
 import { MicButton } from '../ui/MicButton'
 import { PressableButton } from '../ui/Pressable'
 import { ElderSticker, SparkleSticker } from '../ui/stickers'
-import { listenOnce, speak, stopSpeaking } from '../lib/speech'
-import { postVoice } from '../lib/api'
+import { listenOnce, playAudioUrl, speak, stopSpeaking } from '../lib/speech'
+import { postVoice, postVoiceAudio } from '../lib/api'
 import { saveConversation } from '../lib/db'
 import { nowMs, uid } from '../lib/ids'
 
@@ -58,6 +58,30 @@ export function HomePage() {
     })
   }
 
+  const recordOnce = async (ms = 4500): Promise<Blob> => {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    return await new Promise((resolve, reject) => {
+      const chunks: BlobPart[] = []
+      const rec = new MediaRecorder(stream, { mimeType: 'audio/webm' })
+      rec.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) chunks.push(e.data)
+      }
+      rec.onerror = () => reject(new Error('Audio recording failed'))
+      rec.onstop = () => {
+        for (const t of stream.getTracks()) t.stop()
+        resolve(new Blob(chunks, { type: 'audio/webm' }))
+      }
+      rec.start()
+      window.setTimeout(() => {
+        try {
+          rec.stop()
+        } catch {
+          // ignore
+        }
+      }, ms)
+    })
+  }
+
   const runVoice = async () => {
     setError('')
     if (busy) return
@@ -69,23 +93,42 @@ export function HomePage() {
     }
 
     try {
+      const geo = await getGeoOnce()
       setSpeaking(true)
-      const { transcript } = await listenOnce({ lang: 'en-IN', timeoutMs: 9000 })
-      setLastUser(transcript)
+      let transcript = ''
+      let audioBlob: Blob | null = null
+      try {
+        // Prefer real mic audio -> backend STT (Whisper) if available.
+        audioBlob = await recordOnce(5200)
+      } catch {
+        audioBlob = null
+      }
+
+      if (!audioBlob) {
+        const r = await listenOnce({ lang: 'en-IN', timeoutMs: 9000 })
+        transcript = r.transcript
+      }
+
+      setLastUser(transcript || '(voice)')
       setSpeaking(false)
 
       setBusy(true)
-      const geo = await getGeoOnce()
-      const res = await postVoice({ user_id: 'demo', text: transcript, lat: geo?.lat, lon: geo?.lon })
+      const res = audioBlob
+        ? await postVoiceAudio({ user_id: 'demo', audio: audioBlob, text: transcript || undefined, lat: geo?.lat, lon: geo?.lon })
+        : await postVoice({ user_id: 'demo', text: transcript, lat: geo?.lat, lon: geo?.lon })
       setLastBot(res.text)
       void saveConversation({
         id: uid(),
         createdAt: nowMs(),
-        userText: transcript,
+        userText: transcript || '(voice)',
         botText: res.text,
         mood: res.mood,
       })
-      speak(res.text, { lang: 'en-IN', rate: 0.92, pitch: 1.02 })
+      if (res.audio_url) {
+        await playAudioUrl(res.audio_url)
+      } else {
+        speak(res.text, { lang: 'en-IN', rate: 0.92, pitch: 1.02 })
+      }
     } catch (e: unknown) {
       setSpeaking(false)
       setError((e as { message?: string } | undefined)?.message || 'Something went wrong')

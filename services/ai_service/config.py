@@ -22,6 +22,9 @@ class AISettings:
 
     tavily_api_key: str | None = _env("TAVILY_API_KEY")
 
+    gemini_api_key: str | None = _env("GEMINI_API_KEY")
+    gemini_model: str = _env("GEMINI_MODEL", "gemini-1.5-flash") or "gemini-1.5-flash"
+
     openweather_api_key: str | None = _env("OPENWEATHER_API_KEY")
     vedastro_base_url: str = _env("VEDASTRO_BASE_URL", "https://api.vedastro.org") or "https://api.vedastro.org"
     vedastro_ayanamsa: str = _env("VEDASTRO_AYANAMSA", "RAMAN") or "RAMAN"
@@ -29,6 +32,8 @@ class AISettings:
 
     media_dir: str = _env("MEDIA_DIR", "backend_media") or "backend_media"
     base_url: str = _env("BASE_URL", "http://127.0.0.1:8010") or "http://127.0.0.1:8010"
+
+    data_service_url: str = _env("DATA_SERVICE_URL", "http://127.0.0.1:8002") or "http://127.0.0.1:8002"
 
 
 settings = AISettings()
