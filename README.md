@@ -22,17 +22,23 @@ ElderMind is a **voice-first AI companion** that talks to elderly Indians in the
 
 ## 💰 Cost: 100% FREE
 
-| Component | Tool | Cost | 
+ElderMind is designed to run on free tiers where possible, with optional paid add-ons.
+
+| Component | Tool | Cost |
 |-----------|------|------|
-| Speech Recognition | Whisper (local) | FREE |
-| Main AI Brain | Gemini 1.5 Flash | FREE |
+| Frontend UI | React + Vite + Tailwind | FREE |
+| Animations | GSAP | FREE |
+| Page transitions | Barba.js | FREE |
+| Offline persistence | IndexedDB (`idb`) | FREE |
+| API Gateway | FastAPI | FREE |
+| AI Brain (primary) | Groq (OpenAI-compatible endpoint) | Free tier (provider-dependent) |
+| Web tool (optional) | Tavily Search API | Free tier (provider-dependent) |
 | Voice Output | gTTS | FREE |
-| Emotion Detection | SpeechBrain | FREE |
-| Database | Firebase | FREE tier |
-| Alerts | Twilio | $15 trial |
-| Scheduling | APScheduler | FREE |
-| Frontend | Next.js + Vercel | FREE |
-| Camera SpO2 | pyVHR | FREE |
+| Weather context (optional) | OpenWeather API | Free tier (provider-dependent) |
+| Calendar context (tithi) | VedAstro API (AllPlanetData) | Free tier (rate-limited) |
+| Database (optional) | Firebase Firestore (via `firebase-admin`) | Free tier |
+| Alerts (optional) | Twilio | Trial credits / paid |
+| Scheduling (service) | APScheduler | FREE
 
 **Total Setup Cost: ₹0**
 
@@ -49,7 +55,7 @@ ElderMind is a **voice-first AI companion** that talks to elderly Indians in the
 
 ```bash
 # Clone repo
-git clone https://github.com/yourname/eldermind.git
+git clone https://github.com/AdvayaBGSCET/team-pixel-pioneers.git
 cd eldermind
 
 # Create Python environment (Windows PowerShell)
@@ -130,72 +136,163 @@ http://localhost:5173/index.html
 ## 📁 Project Structure
 
 ```
-eldermind/
+team-pixel-pioneers/
 │
-├── backend/                      # FastAPI Server
-│   ├── main.py                   # Main routes
-│   ├── config.py                 # Settings
-│   ├── requirements.txt
-│   │
-│   ├── ai/                       # AI Components
-│   │   ├── brain.py              # Gemini/Groq calls
-│   │   ├── speech_to_text.py     # Whisper STT
-│   │   ├── text_to_speech.py     # gTTS TTS
-│   │   ├── emotion.py            # SpeechBrain mood
-│   │   ├── spo2_camera.py        # Camera SpO2
-│   │   └── system_prompt.py      # Full AI prompt
-│   │
-│   ├── scheduler/                # Background Jobs
-│   │   ├── medicine.py           # Med reminders
-│   │   ├── checkins.py           # 2-hour check-ins
-│   │   ├── cultural.py           # Prayers/stories
-│   │   └── reports.py            # Weekly reports
-│   │
-│   ├── data/                     # Database & Memory
-│   │   ├── firebase_init.py      # Firebase setup
-│   │   ├── db_ops.py             # CRUD operations
-│   │   ├── memory.py             # Conversation memory
-│   │   └── hindu_calendar.py     # Tithi/festivals
-│   │
-│   └── alerts/                   # Notifications
-│       └── twilio_handler.py     # SMS/WhatsApp/Call
-│
-├── frontend/                     # Next.js + PWA
-│   ├── pages/
-│   │   ├── index.js              # Ramesh's main screen
-│   │   ├── dashboard.js          # Kiran's dashboard
-│   │   ├── onboarding.js         # Setup wizard
-│   │   └── admin.js              # Admin panel
-│   │
-│   ├── components/
-│   │   ├── VoiceButton.js        # Mic button
-│   │   ├── ResponseDisplay.js    # AI response UI
-│   │   ├── MedicineCard.js       # Medicine reminder
-│   │   ├── SOSButton.js          # Emergency button
-│   │   ├── MoodChart.js          # Mood history
-│   │   ├── AlertFeed.js          # Alerts live feed
-│   │   ├── HealthReport.js       # Weekly report
-│   │   └── MedicineList.js       # Edit medicines
-│   │
-│   ├── hooks/
-│   │   ├── useVoiceInput.js      # Voice capture
-│   │   ├── useFirebase.js        # Real-time sync
-│   │   └── useTwilio.js          # Alert triggers
-│   │
+├── frontend/                           # Vite + React (multi-page) PWA UI
+│   ├── index.html                      # Home (voice assistant)
+│   ├── medication.html                 # Medication screen
+│   ├── activity.html                   # Activity/status screen
+│   ├── alert.html                      # SOS / emergency screen
+│   ├── summary.html                    # Weekly summary screen
+│   ├── caregiver.html                  # Caregiver dashboard screen
 │   ├── public/
-│   │   ├── manifest.json         # PWA config
-│   │   └── service-worker.js     # Offline support
-│   │
-│   ├── styles/
-│   │   └── globals.css           # Tailwind + custom
-│   │
-│   └── package.json
+│   │   ├── manifest.webmanifest        # PWA manifest
+│   │   ├── sw.js                       # Service worker cache-first
+│   │   └── pwa-icon.svg                # PWA icon
+│   └── src/
+│       ├── screens/                    # Page components for each screen
+│       ├── ui/                         # AppShell, BottomNav, MicButton, Cards, Stickers
+│       ├── transitions/                # Barba.js + GSAP page transitions
+│       └── lib/                        # API client, IndexedDB, speech helpers, notifications
 │
-├── .env.example                  # Environment template
-├── README.md                      # This file
-├── ARCHITECTURE.md               # System design
-└── SYSTEM_PROMPT.md              # AI prompt reference
+├── gateway/                            # FastAPI API Gateway (BFF)
+│   ├── main.py                         # Public endpoints (/voice, /sos, /medicine, /dashboard, /report)
+│   └── config.py                       # Env-based service URLs / CORS
+│
+├── services/
+│   ├── ai_service/                     # AI pipeline + context injection + TTS
+│   │   ├── main.py                     # /voice + /health
+│   │   ├── groq_client.py              # Groq chat completion
+│   │   ├── tavily_client.py            # Optional web search
+│   │   ├── markers.py                  # [HEALTH_LOG]/[MOOD_LOG]/[ALERT] parser
+│   │   ├── tts.py                      # gTTS MP3 generation
+│   │   ├── weather_client.py           # OpenWeather (cached)
+│   │   └── vedastro_client.py          # VedAstro tithi (cached)
+│   ├── data_service/                   # Persistence (local JSON or Firestore)
+│   │   ├── main.py
+│   │   └── store.py
+│   ├── alerts_service/                 # SOS handling (Twilio stub unless configured)
+│   │   └── main.py
+│   └── scheduler_service/              # APScheduler demo jobs
+│       └── main.py
+│
+├── requirements.txt                    # Python deps for gateway + services
+├── run_all.ps1                         # Start gateway + services
+├── .env.example                        # Env template (never commit real keys)
+└── prompt.md                           # ElderMind system prompt / behavior contract
 ```
+
+---
+
+## 🧩 What problem are we solving?
+
+ElderMind targets real problems elderly users face daily:
+
+- **Loneliness & anxiety**: a warm “always-there” voice companion designed to feel like family.
+- **Medication adherence**: reminders + quick confirmation + caregiver visibility.
+- **Caregiver stress**: a dashboard + alerts so family can monitor without constant calling.
+- **Low digital literacy**: voice-first UX, big buttons, minimal reading, soft visuals.
+- **Offline / low connectivity**: PWA install + offline caching + local IndexedDB logging.
+
+---
+
+## 🏗️ System Architecture (frontend + backend)
+
+```mermaid
+flowchart TD
+  subgraph frontend [Frontend_PWA_(Vite_React_MPA)]
+    Home[Home_Voice_Screen]
+    Meds[Medication_Screen]
+    Act[Activity_Screen]
+    Sos[Emergency_Screen]
+    Weekly[Weekly_Summary_Screen]
+    Care[Caregiver_Screen]
+    PWA[PWA_Manifest+ServiceWorker]
+    IDB[IndexedDB_OfflineStore]
+  end
+
+  subgraph gateway [Gateway_(FastAPI_BFF)]
+    GWVoice[POST_/voice]
+    GWSos[POST_/sos]
+    GWMed[POST_/medicine/*]
+    GWDash[GET_/dashboard/*]
+    GWReport[GET_/report/*]
+  end
+
+  subgraph services [Microservices_(FastAPI)]
+    AI[ai_service]
+    Data[data_service]
+    Alerts[alerts_service]
+    Sched[scheduler_service]
+  end
+
+  subgraph externals [External_APIs_(optional)]
+    Groq[Groq_LLM]
+    Tavily[Tavily_Search]
+    OpenWeather[OpenWeather]
+    VedAstro[VedAstro_AllPlanetData]
+    Twilio[Twilio_SMS/WhatsApp]
+    Firestore[Firebase_Firestore]
+  end
+
+  Home -->|voice_text+lat_lon| GWVoice
+  Meds --> GWMed
+  Sos --> GWSos
+  Care --> GWDash
+  Weekly --> GWReport
+
+  GWVoice --> AI
+  GWMed --> Data
+  GWDash --> Data
+  GWReport --> Data
+  GWSos --> Alerts
+
+  AI --> Groq
+  AI --> Tavily
+  AI --> OpenWeather
+  AI --> VedAstro
+  AI -->|logs| Data
+
+  Alerts --> Twilio
+  Alerts -->|persist| Data
+  Sched -->|check-ins/reminders| GWVoice
+
+  PWA --> IDB
+  Home -->|save_conversations| IDB
+```
+
+### Request flow (today)
+
+1. **Frontend** captures speech (browser STT today) + geolocation and calls `POST /voice` on the gateway.
+2. **Gateway** forwards to `ai_service`.
+3. **AI service** builds system prompt from `prompt.md`, injects context (weather + tithi), calls LLM, parses markers, generates MP3 via gTTS, returns `audio_url`.
+4. **Frontend** plays audio and stores a local copy in IndexedDB (offline history).
+
+---
+
+## 🧰 Tools & libraries used (current repo)
+
+### Frontend
+- **React + Vite (TypeScript)**: UI + fast dev server, multi-page build
+- **Tailwind CSS**: consistent “elder-friendly” styling
+- **GSAP**: micro-interactions (press, float, pulse, charts)
+- **Barba.js**: smooth page transitions across the MPA pages
+- **PWA**: `manifest.webmanifest` + `sw.js` for offline caching and install
+- **IndexedDB (`idb`)**: offline storage for conversations / medication logs
+
+### Backend (Python)
+- **FastAPI**: gateway + services
+- **httpx**: service-to-service HTTP calls
+- **APScheduler**: scheduled check-ins / reminders (demo)
+- **gTTS**: MP3 synthesis for voice replies
+- **firebase-admin**: optional Firestore persistence (enabled when configured)
+- **twilio**: optional alerts (stubbed unless configured)
+
+### External APIs (optional)
+- **Groq**: LLM chat completions
+- **Tavily**: web search tool for “webby” questions
+- **OpenWeather**: weather context injection
+- **VedAstro**: calendar context (tithi computed from AllPlanetData)
 
 ---
 
