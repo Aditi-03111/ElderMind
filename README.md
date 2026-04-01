@@ -199,74 +199,67 @@ ElderMind targets real problems elderly users face daily:
 ## 🏗️ System Architecture (frontend + backend)
 
 ```mermaid
-flowchart TD
-  subgraph frontend [Frontend_PWA_(Vite_React_MPA)]
-    Home[Home_Voice_Screen]
-    Meds[Medication_Screen]
-    Act[Activity_Screen]
-    Sos[Emergency_Screen]
-    Weekly[Weekly_Summary_Screen]
-    Care[Caregiver_Screen]
-    PWA[PWA_Manifest+ServiceWorker]
-    IDB[IndexedDB_OfflineStore]
+flowchart LR
+  subgraph frontend["Frontend PWA<br/>Vite + React (MPA)<br/>Tailwind + GSAP + Barba"]
+    Pages["Screens<br/>Home • Medication • Activity • Alert • Weekly • Caregiver"]
+    PWA["PWA Layer<br/>manifest + sw.js"]
+    IDB["Offline Store<br/>IndexedDB (idb)"]
+    Pages --> IDB
+    Pages --> PWA
   end
 
-  subgraph gateway [Gateway_(FastAPI_BFF)]
-    GWVoice[POST_/voice]
-    GWSos[POST_/sos]
-    GWMed[POST_/medicine/*]
-    GWDash[GET_/dashboard/*]
-    GWReport[GET_/report/*]
+  subgraph gateway["Gateway<br/>FastAPI (BFF)"]
+    GWVoice["POST /voice<br/>text/audio + lat/lon"]
+    GWSos["POST /sos<br/>reason + location"]
+    GWMed["POST /medicine/{med_id}/confirm"]
+    GWMeds["GET /medicine/{user_id}"]
+    GWDash["GET /dashboard/{caregiver_id}"]
+    GWWeekly["GET /report/weekly/{user_id}"]
   end
 
-  subgraph services [Microservices_(FastAPI)]
-    AI[ai_service]
-    Data[data_service]
-    Alerts[alerts_service]
-    Sched[scheduler_service]
+  subgraph services["Services<br/>FastAPI microservices"]
+    AI["ai_service<br/>prompt.md + context + markers + gTTS"]
+    Data["data_service<br/>Local JSON or Firestore"]
+    Alerts["alerts_service<br/>SOS + Twilio (stub/real)"]
+    Sched["scheduler_service<br/>APScheduler jobs"]
   end
 
-  subgraph externals [External_APIs_(optional)]
-    Groq[Groq_LLM]
-    Tavily[Tavily_Search]
-    OpenWeather[OpenWeather]
-    VedAstro[VedAstro_AllPlanetData]
-    Twilio[Twilio_SMS/WhatsApp]
-    Firestore[Firebase_Firestore]
+  subgraph externals["External APIs (optional)"]
+    Groq["Groq LLM"]
+    Tavily["Tavily Search"]
+    OpenWeather["OpenWeather"]
+    VedAstro["VedAstro<br/>AllPlanetData (tithi)"]
+    Twilio["Twilio"]
+    Firestore["Firebase Firestore"]
   end
 
-  Home -->|voice_text+lat_lon| GWVoice
-  Meds --> GWMed
-  Sos --> GWSos
-  Care --> GWDash
-  Weekly --> GWReport
+  Pages --> GWVoice
+  Pages --> GWSos
+  Pages --> GWMed
+  Pages --> GWMeds
+  Pages --> GWDash
+  Pages --> GWWeekly
 
   GWVoice --> AI
   GWMed --> Data
+  GWMeds --> Data
   GWDash --> Data
-  GWReport --> Data
+  GWWeekly --> Data
   GWSos --> Alerts
 
   AI --> Groq
   AI --> Tavily
   AI --> OpenWeather
   AI --> VedAstro
-  AI -->|logs| Data
+  AI --> Data
 
   Alerts --> Twilio
-  Alerts -->|persist| Data
-  Sched -->|check-ins/reminders| GWVoice
+  Alerts --> Data
 
-  PWA --> IDB
-  Home -->|save_conversations| IDB
+  Sched --> GWVoice
+
+  Data --> Firestore
 ```
-
-### Request flow (today)
-
-1. **Frontend** captures speech (browser STT today) + geolocation and calls `POST /voice` on the gateway.
-2. **Gateway** forwards to `ai_service`.
-3. **AI service** builds system prompt from `prompt.md`, injects context (weather + tithi), calls LLM, parses markers, generates MP3 via gTTS, returns `audio_url`.
-4. **Frontend** plays audio and stores a local copy in IndexedDB (offline history).
 
 ---
 
