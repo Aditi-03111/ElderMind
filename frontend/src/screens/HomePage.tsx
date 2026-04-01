@@ -430,8 +430,12 @@ export function HomePage() {
       try {
         const heard = await listenOnce({ lang: browserLang(profile), timeoutMs: 9000 })
         transcript = heard.transcript
-      } catch {
-        audioBlob = await recordOnce(9000)
+      } catch (err: any) {
+        if (err.message && err.message.includes('not supported')) {
+          audioBlob = await recordOnce(9000)
+        } else {
+          throw err
+        }
       }
       setSpeaking(false)
       await sendAssistantMessage(transcript, audioBlob)
