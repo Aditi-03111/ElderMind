@@ -106,7 +106,8 @@ async def voice(request: Request):
         form = await request.form()
         user_id = str(form.get("user_id") or user_id)
         text = form.get("text")
-        audio = form.get("audio") if isinstance(form.get("audio"), UploadFile) else None
+        _aud = form.get("audio")
+        audio = _aud if hasattr(_aud, "filename") else None
         if form.get("lat") is not None and form.get("lon") is not None:
             try:
                 lat = float(str(form.get("lat")))
