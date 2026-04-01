@@ -1210,6 +1210,44 @@
         "festival": "",
         "tithi": ""
       }
+    },
+    {
+      "id": "ec300ff5-2d87-4fa8-b61b-3836ab194737",
+      "ts": "2026-04-01T18:53:37.570493+00:00",
+      "text_input": "Khaana kha liya?",
+      "ai_response": "Ramesh ji, main sun raha hoon. Aap aaraam se boliye.",
+      "mood": "okay",
+      "emotion": "neutral",
+      "health_logs": [],
+      "mood_logs": [
+        "okay"
+      ],
+      "alerts": [],
+      "source": "voice",
+      "context": {
+        "weather": "unknown",
+        "festival": "",
+        "tithi": ""
+      }
+    },
+    {
+      "id": "87192392-d542-4136-8762-57166287cf88",
+      "ts": "2026-04-01T18:53:38.381199+00:00",
+      "text_input": "Ek sundar doha sunna chahenge?",
+      "ai_response": "Ramesh, काळजी करू नका. आपण हळूहळू पाहू.",
+      "mood": "anxious",
+      "emotion": "neutral",
+      "health_logs": [],
+      "mood_logs": [
+        "anxious"
+      ],
+      "alerts": [],
+      "source": "voice",
+      "context": {
+        "weather": "unknown",
+        "festival": "",
+        "tithi": ""
+      }
     }
   ],
   "lang-smoke": [
