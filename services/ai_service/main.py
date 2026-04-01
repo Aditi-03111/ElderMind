@@ -1,27 +1,31 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
+import httpx
 from fastapi import FastAPI, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import settings
+from .cultural_library import build_daily_calendar, search_library
 from .emotion import infer_emotion_from_audio_bytes
 from .gemini_client import gemini_generate_text
 from .groq_client import groq_chat_completion
-from .markers import parse_markers
+from .markers import ParsedMarkers, parse_markers
 from .prompt_loader import load_system_prompt
 from .stt import transcribe_audio_bytes
 from .tavily_client import tavily_search
 from .tts import synthesize_mp3
-from .weather_client import fetch_openweather_summary
 from .vedastro_client import fetch_tithi_festival
+from .weather_client import fetch_openweather_summary
 
 
-app = FastAPI(title="ElderMind AI Service", version="0.1.0")
+app = FastAPI(title="ElderMind AI Service", version="0.2.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -35,32 +39,612 @@ Path(settings.media_dir).mkdir(parents=True, exist_ok=True)
 app.mount("/media", StaticFiles(directory=settings.media_dir), name="media")
 
 
+HEALTH_PATTERNS: dict[str, tuple[str, ...]] = {
+    "headache": ("headache", "head", "chakra", "sar dard"),
+    "knee_pain": ("knee", "ghutna", "joint pain"),
+    "chest_pain": ("chest pain", "chest", "seene", "heart pain"),
+    "breathing": ("breath", "saans", "breathing", "suffocation"),
+    "dizziness": ("dizzy", "dizziness", "chakkar"),
+    "nausea": ("nausea", "jee machal", "vomit feel"),
+    "vomiting": ("vomit", "ulthi", "throwing up"),
+    "fever": ("fever", "bukhar", "temperature"),
+    "appetite_low": ("no appetite", "bhook", "not eating"),
+    "sleep_poor": ("sleep", "neend nahi", "could not sleep"),
+    "fatigue": ("tired", "fatigue", "thakaan", "no energy"),
+    "confusion": ("confused", "bhool", "forgetting", "samajh nahi"),
+    "fall": ("fell", "fall", "gir gaya", "gir gayi"),
+}
+
+LOW_MOOD_TERMS = ("alone", "akela", "lonely", "miss", "sad", "udaas", "kuch achha nahi")
+ANXIOUS_TERMS = ("worried", "tension", "anxious", "dar", "panic", "money", "hospital")
+GOOD_MOOD_TERMS = ("happy", "accha", "good", "great", "story", "joke", "prayer")
+HINDI_TERMS = ("aap", "kya", "kaise", "haan", "ji", "paani", "dard", "acha", "accha", "thoda", "main", "mera")
+KANNADA_TERMS = ("nimma", "hegiddira", "neeru", "oota", "beda", "dayavittu", "amma", "appa")
+TAMIL_TERMS = ("eppadi", "saptingla", "thanni", "amma", "appa", "venuma", "seri")
+TELUGU_TERMS = ("ela", "bagunnara", "neellu", "amma", "nanna", "andi")
+MARATHI_TERMS = ("tumhi", "kasa", "pani", "baray", "ahe", "kaay", "मला", "आहे", "डोके", "थोडंसं")
+GUJARATI_TERMS = ("kem", "cho", "paani", "saru", "chhe", "tame")
+
+
+def _browser_lang_for_code(code: str) -> str:
+    return {
+        "hi": "hi-IN",
+        "kn": "kn-IN",
+        "ta": "ta-IN",
+        "te": "te-IN",
+        "gu": "gu-IN",
+        "mr": "mr-IN",
+    }.get(code, "en-IN")
+
+
+def _contains_codepoint(text: str, start: int, end: int) -> bool:
+    return any(start <= ord(ch) <= end for ch in text)
+
+
+def _default_coords_for_region(region: str) -> tuple[float, float]:
+    lowered = (region or "").strip().lower()
+    if "karnataka" in lowered:
+        return 12.9716, 77.5946
+    if "tamil" in lowered:
+        return 13.0827, 80.2707
+    if "maharashtra" in lowered:
+        return 19.076, 72.8777
+    if "gujarat" in lowered:
+        return 23.0225, 72.5714
+    if "uttar" in lowered or "bihar" in lowered:
+        return 26.8467, 80.9462
+    return 12.9716, 77.5946
+
+
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "ai"}
 
 
-def _lang_for_user(user_id: str) -> str:
-    # demo default
-    return "en"
+def _lang_for_user(profile: dict[str, Any]) -> tuple[str, str]:
+    language = str(profile.get("language") or "Hindi").strip().lower()
+    if "kannada" in language:
+        return "kn", "Kannada"
+    if "tamil" in language:
+        return "ta", "Tamil"
+    if "telugu" in language:
+        return "te", "Telugu"
+    if "gujarati" in language:
+        return "gu", "Gujarati"
+    if "marathi" in language:
+        return "mr", "Marathi"
+    if "hindi" in language:
+        return "hi", "Hindi"
+    return "en", "English"
 
-def _fallback_reply(user_text: str) -> str:
-    t = (user_text or "").lower()
-    if any(k in t for k in ["alone", "akela", "lonely", "miss", "sad"]):
-        return "Akela lag raha hai na? Main yahin hoon — thodi baat karein. [MOOD_LOG: low]"
-    if any(k in t for k in ["head", "chakra", "headache"]):
-        return "Arre, sar dard hai na? Thoda aaram karo aur paani pi lo. [HEALTH_LOG: headache]"
-    if any(k in t for k in ["fall", "chest", "emergency", "sos"]):
-        return "Theek hai, main aapke saath hoon. Main caregiver ko bata deta hoon. [ALERT: urgent]"
-    return "Haan, main sun raha hoon. Aap araam se boliye."
+
+def _detect_runtime_language(user_text: str, profile: dict[str, Any]) -> tuple[str, str]:
+    cleaned = _clean_text(user_text)
+    if not cleaned:
+        return _lang_for_user(profile)
+
+    lowered = cleaned.lower()
+    if _contains_codepoint(cleaned, 0x0C80, 0x0CFF):
+        return "kn", "Kannada"
+    if _contains_codepoint(cleaned, 0x0B80, 0x0BFF):
+        return "ta", "Tamil"
+    if _contains_codepoint(cleaned, 0x0C00, 0x0C7F):
+        return "te", "Telugu"
+    if _contains_codepoint(cleaned, 0x0A80, 0x0AFF):
+        return "gu", "Gujarati"
+    if _contains_codepoint(cleaned, 0x0900, 0x097F):
+        if sum(term in lowered for term in MARATHI_TERMS) > sum(term in lowered for term in HINDI_TERMS):
+            return "mr", "Marathi"
+        return "hi", "Hindi"
+
+    scored = {
+        "hi": sum(term in lowered for term in HINDI_TERMS),
+        "kn": sum(term in lowered for term in KANNADA_TERMS),
+        "ta": sum(term in lowered for term in TAMIL_TERMS),
+        "te": sum(term in lowered for term in TELUGU_TERMS),
+        "mr": sum(term in lowered for term in MARATHI_TERMS),
+        "gu": sum(term in lowered for term in GUJARATI_TERMS),
+    }
+    best_code = max(scored, key=scored.get)
+    if scored[best_code] > 0:
+        return {
+            "hi": ("hi", "Hindi"),
+            "kn": ("kn", "Kannada"),
+            "ta": ("ta", "Tamil"),
+            "te": ("te", "Telugu"),
+            "mr": ("mr", "Marathi"),
+            "gu": ("gu", "Gujarati"),
+        }[best_code]
+    return _lang_for_user(profile)
+
+
+def _clean_text(text: str) -> str:
+    return re.sub(r"\s+", " ", (text or "")).strip()
+
+
+def _detect_health_logs(user_text: str) -> list[str]:
+    lowered = user_text.lower()
+    found: list[str] = []
+    for label, keywords in HEALTH_PATTERNS.items():
+        if any(term in lowered for term in keywords):
+            found.append(label)
+    return found
+
+
+def _derive_mood(user_text: str, emotion_label: str, parsed: ParsedMarkers) -> str:
+    if parsed.mood_logs:
+        return parsed.mood_logs[-1]
+    lowered = user_text.lower()
+    if any(term in lowered for term in LOW_MOOD_TERMS):
+        return "low"
+    if any(term in lowered for term in ANXIOUS_TERMS):
+        return "anxious"
+    if any(term in lowered for term in GOOD_MOOD_TERMS):
+        return "good"
+    if emotion_label in {"sad", "fear", "angry"}:
+        return "low" if emotion_label == "sad" else "anxious"
+    return "okay"
+
+
+def _count_low_days(recent_conversations: list[dict[str, Any]]) -> int:
+    low_days: set[str] = set()
+    for item in recent_conversations:
+        mood = str(item.get("mood") or "").lower()
+        ts = str(item.get("ts") or "")
+        if mood == "low" and len(ts) >= 10:
+            low_days.add(ts[:10])
+    return len(low_days)
+
+
+def _derive_alerts(
+    user_text: str,
+    health_logs: list[str],
+    mood: str,
+    parsed: ParsedMarkers,
+    recent_conversations: list[dict[str, Any]],
+) -> list[str]:
+    alerts = list(parsed.alerts)
+    urgent_health = {"chest_pain", "breathing", "confusion", "fall", "vomiting"}
+    if any(issue in urgent_health for issue in health_logs):
+        alerts.append("urgent_health")
+    if mood == "low" and _count_low_days(recent_conversations[-30:]) >= 3:
+        alerts.append("mood_pattern_low")
+    lowered = user_text.lower()
+    if any(term in lowered for term in ("emergency", "sos", "help me", "call someone")):
+        alerts.append("urgent_help")
+    # preserve order while deduplicating
+    seen: set[str] = set()
+    unique: list[str] = []
+    for item in alerts:
+        if item in seen:
+            continue
+        seen.add(item)
+        unique.append(item)
+    return unique
+
+
+def _extract_memories(user_text: str, profile: dict[str, Any]) -> list[dict[str, Any]]:
+    text = _clean_text(user_text)
+    lowered = text.lower()
+    memories: list[dict[str, Any]] = []
+
+    match = re.search(r"\bmy son is ([A-Za-z]+)|mera beta ([A-Za-z]+)", text, re.IGNORECASE)
+    if match:
+        name = match.group(1) or match.group(2)
+        if name:
+            memories.append({"fact": f"Son's name is {name}", "category": "family"})
+
+    if "i like" in lowered:
+        fact = text.split("like", 1)[-1].strip(" .")
+        if fact:
+            memories.append({"fact": f"Likes {fact}", "category": "preference"})
+
+    if any(term in lowered for term in LOW_MOOD_TERMS):
+        caretaker = profile.get("caretaker_name") or profile.get("caregiver_name") or "family"
+        memories.append({"fact": f"Feels lonely and misses {caretaker}", "category": "emotion"})
+
+    if "pray" in lowered or "chalisa" in lowered or "doha" in lowered:
+        memories.append({"fact": "Enjoys spiritual content", "category": "preference"})
+
+    return memories
+
+
+def _fallback_reply(
+    user_text: str,
+    profile: dict[str, Any],
+    mood: str,
+    health_logs: list[str],
+    alerts: list[str],
+    response_lang_code: str,
+) -> str:
+    name = str(profile.get("name") or "Friend")
+    if response_lang_code == "en":
+        if "doha" in user_text.lower():
+            return f"{name}, here is a gentle doha: slowly and with patience, everything comes in time. [MOOD_LOG: good]"
+        if "prayer" in user_text.lower() or "chalisa" in user_text.lower():
+            return f"{name}, let us say a short prayer together. I am here with you. [MOOD_LOG: good]"
+        if "fall" in health_logs or "urgent_health" in alerts:
+            return f"{name}, I am with you. I am telling your support person right now. [ALERT: urgent_health]"
+        if "headache" in health_logs:
+            return f"{name}, a headache feels hard. Please rest a little and drink some water. [HEALTH_LOG: headache]"
+        if mood == "low":
+            return f"{name}, it feels lonely, na. Talk to me, I am right here. [MOOD_LOG: low]"
+        if mood == "anxious":
+            return f"{name}, do not worry, we will take this one step at a time. I am with you. [MOOD_LOG: anxious]"
+        return f"{name}, I am listening. Please speak slowly. [MOOD_LOG: okay]"
+    if response_lang_code == "kn":
+        if mood == "low":
+            return f"{name} avare, ಒಂಟಿಯಾಗಿದೆಯೇ? ನಾನು ಇಲ್ಲಿದ್ದೇನೆ. [MOOD_LOG: low]"
+        if mood == "anxious":
+            return f"{name} avare, ಚಿಂತಿಸಬೇಡಿ. ನಿಧಾನವಾಗಿ ನೋಡೋಣ. [MOOD_LOG: anxious]"
+        return f"{name} avare, ನಾನು ಕೇಳುತ್ತಿದ್ದೇನೆ. ಆರಾಮವಾಗಿ ಹೇಳಿ. [MOOD_LOG: okay]"
+    if response_lang_code == "ta":
+        if mood == "low":
+            return f"{name}, தனியாக இருக்கிற மாதிரி தோன்றுகிறதா? நான் இருக்கிறேன். [MOOD_LOG: low]"
+        if mood == "anxious":
+            return f"{name}, கவலைப்பட வேண்டாம். நிதானமாக பார்க்கலாம். [MOOD_LOG: anxious]"
+        return f"{name}, நான் கேட்டு கொண்டிருக்கிறேன். அமைதியாக சொல்லுங்கள். [MOOD_LOG: okay]"
+    if response_lang_code == "te":
+        if mood == "low":
+            return f"{name} garu, ఒంటరిగా అనిపిస్తున్నదా? నేను మీతోనే ఉన్నాను. [MOOD_LOG: low]"
+        if mood == "anxious":
+            return f"{name} garu, ఆందోళన పడకండి. నెమ్మదిగా చూద్దాం. [MOOD_LOG: anxious]"
+        return f"{name} garu, నేను వింటున్నాను. నెమ్మదిగా చెప్పండి. [MOOD_LOG: okay]"
+    if response_lang_code == "gu":
+        if mood == "low":
+            return f"{name}, એકલું લાગી રહ્યું છે ને? હું અહીં છું. [MOOD_LOG: low]"
+        if mood == "anxious":
+            return f"{name}, ચિંતા ન કરો. ધીમે ધીમે જોઈએ. [MOOD_LOG: anxious]"
+        return f"{name}, હું સાંભળી રહ્યો છું. આરામથી કહો. [MOOD_LOG: okay]"
+    if response_lang_code == "mr":
+        if mood == "low":
+            return f"{name}, एकटं वाटत आहे ना? मी इथेच आहे. [MOOD_LOG: low]"
+        if mood == "anxious":
+            return f"{name}, काळजी करू नका. आपण हळूहळू पाहू. [MOOD_LOG: anxious]"
+        return f"{name}, मी ऐकत आहे. शांतपणे सांगा. [MOOD_LOG: okay]"
+    if "doha" in user_text.lower():
+        return f"{name} ji, suno: Dhire dhire re mana, dhire sab kuch hoye. Sab kuch apne samay par hota hai. [MOOD_LOG: good]"
+    if "prayer" in user_text.lower() or "chalisa" in user_text.lower():
+        return f"{name} ji, chalo ek chhoti prarthana saath karte hain. Main hoon, aap aaraam se suno. [MOOD_LOG: good]"
+    if "fall" in health_logs or "urgent_health" in alerts:
+        return f"{name} ji, main aapke saath hoon. Main ab caretaker ko bata raha hoon. [ALERT: urgent_health]"
+    if "headache" in health_logs:
+        return f"{name} ji, sar dard mushkil hota hai. Thoda rest kijiye aur paani pee lijiye. [HEALTH_LOG: headache]"
+    if mood == "low":
+        return f"{name} ji, akela lag raha hai na. Baat kariye, main yahin hoon. [MOOD_LOG: low]"
+    if mood == "anxious":
+        return f"{name} ji, chinta mat kijiye, hum ek-ek baat dheere se dekhenge. Main saath hoon. [MOOD_LOG: anxious]"
+    return f"{name} ji, main sun raha hoon. Aap aaraam se boliye. [MOOD_LOG: okay]"
+
+
+def _fallback_report_analysis(report_text: str, profile: dict[str, Any]) -> dict[str, str]:
+    cleaned = _clean_text(report_text)
+    snippet = cleaned[:320] if cleaned else "No readable report text was found."
+    preferences = ", ".join(profile.get("preferences") or []) or "No stored care preferences yet."
+    return {
+        "summary": f"Bhumi found these main report notes: {snippet}",
+        "advice": (
+            "Please verify the report with the doctor, update medicines or reminders only if they were clearly prescribed, "
+            f"and keep these comfort preferences in mind: {preferences}"
+        ),
+    }
+
+
+def _parse_report_analysis(raw: str, report_text: str, profile: dict[str, Any]) -> dict[str, str]:
+    cleaned = _clean_text(raw)
+    if not cleaned:
+        return _fallback_report_analysis(report_text, profile)
+
+    summary = ""
+    advice = ""
+    summary_match = re.search(r"summary\s*:\s*(.+?)(?:advice\s*:|$)", cleaned, re.IGNORECASE)
+    advice_match = re.search(r"advice\s*:\s*(.+)$", cleaned, re.IGNORECASE)
+    if summary_match:
+        summary = summary_match.group(1).strip(" -")
+    if advice_match:
+        advice = advice_match.group(1).strip(" -")
+    if not summary and not advice:
+        parts = [part.strip(" -") for part in re.split(r"(?:\n|;)", raw) if part.strip()]
+        summary = parts[0] if parts else ""
+        advice = parts[1] if len(parts) > 1 else ""
+    if not summary or not advice:
+        fallback = _fallback_report_analysis(report_text, profile)
+        summary = summary or fallback["summary"]
+        advice = advice or fallback["advice"]
+    return {"summary": summary, "advice": advice}
+
+
+def _fallback_medicine_suggestions(report_text: str) -> list[dict[str, Any]]:
+    suggestions: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for line in str(report_text or "").splitlines():
+        cleaned = _clean_text(line)
+        if not cleaned:
+            continue
+        match = re.search(r"(?:tab|tablet|cap|capsule|syrup)?\s*([A-Za-z][A-Za-z0-9 +.-]{2,40})\s+(\d+(?:\.\d+)?\s*(?:mg|ml|mcg|g))", cleaned, re.IGNORECASE)
+        if not match:
+            continue
+        name = match.group(1).strip(" .,-")
+        dose = match.group(2).strip()
+        key = f"{name.lower()}::{dose.lower()}"
+        if key in seen:
+            continue
+        seen.add(key)
+        suggestions.append(
+            {
+                "name": name,
+                "dose": dose,
+                "times": [],
+                "instructions": "",
+                "condition": "",
+            }
+        )
+    return suggestions[:8]
+
+
+def _parse_medicine_suggestions(raw: str, report_text: str) -> list[dict[str, Any]]:
+    suggestions: list[dict[str, Any]] = []
+    for line in str(raw or "").splitlines():
+        cleaned = _clean_text(line)
+        if not cleaned:
+            continue
+        parts = [part.strip() for part in cleaned.split("|")]
+        if len(parts) < 2:
+            continue
+        name = parts[0]
+        dose = parts[1]
+        times = [item.strip() for item in (parts[2] if len(parts) > 2 else "").split(",") if item.strip()]
+        instructions = parts[3] if len(parts) > 3 else ""
+        condition = parts[4] if len(parts) > 4 else ""
+        if not name or not dose:
+            continue
+        suggestions.append(
+            {
+                "name": name,
+                "dose": dose,
+                "times": times,
+                "instructions": instructions,
+                "condition": condition,
+            }
+        )
+    return suggestions or _fallback_medicine_suggestions(report_text)
+
+
+async def _fetch_user_context(user_id: str) -> dict[str, Any]:
+    async with httpx.AsyncClient(timeout=12) as client:
+        user_res = await client.get(f"{settings.data_service_url}/user/{user_id}")
+        meds_res = await client.get(f"{settings.data_service_url}/medicine/{user_id}")
+        conv_res = await client.get(f"{settings.data_service_url}/conversations/{user_id}", params={"limit": 12})
+        memory_res = await client.get(f"{settings.data_service_url}/memory/{user_id}", params={"limit": 12})
+        activity_res = await client.get(f"{settings.data_service_url}/activity/{user_id}")
+
+    return {
+        "user": (user_res.json() or {}).get("user") or {"user_id": user_id},
+        "medicines": (meds_res.json() or {}).get("medicines") or [],
+        "recent_conversations": (conv_res.json() or {}).get("items") or [],
+        "memories": (memory_res.json() or {}).get("items") or [],
+        "activity": (activity_res.json() or {}).get("activity") or {},
+    }
+
+
+def _build_system_prompt(
+    *,
+    base_prompt: str,
+    profile: dict[str, Any],
+    medicines: list[dict[str, Any]],
+    memories: list[dict[str, Any]],
+    recent_conversations: list[dict[str, Any]],
+    mood: str,
+    weather_summary: str,
+    festival_today: str,
+    tithi_today: str,
+    response_language_name: str,
+) -> str:
+    medicine_lines = ", ".join(
+        f"{med.get('name', 'Medicine')} at {', '.join(med.get('times') or [])}" for med in medicines[:8]
+    ) or "None listed"
+    memory_lines = "\n".join(f"- {item.get('fact')}" for item in memories[-10:] if item.get("fact")) or "- No stored memories yet"
+    conversation_lines = "\n".join(
+        f"- User: {item.get('text_input', '')} | Assistant: {item.get('ai_response', '')}"
+        for item in recent_conversations[-10:]
+    ) or "- No recent history"
+    conditions = ", ".join(profile.get("conditions") or []) or "None known"
+    allergies = ", ".join(profile.get("allergies") or []) or "None known"
+    current_time = datetime.now().astimezone().strftime("%H:%M")
+    current_date = datetime.now().astimezone().strftime("%Y-%m-%d")
+
+    injected = f"""
+
+LIVE_CONTEXT:
+USER PROFILE:
+  Name:             {profile.get('name', 'Friend')}
+  Age:              {profile.get('age', 72)}
+  Language:         {profile.get('language', 'Hindi')}
+  Region:           {profile.get('region', 'Karnataka')}
+  Wake Time:        {profile.get('wake_time', '07:00')}
+  Sleep Time:       {profile.get('sleep_time', '21:00')}
+
+MEDICAL:
+  Conditions:       {conditions}
+  Medicines:        {medicine_lines}
+  Allergies:        {allergies}
+
+CURRENT STATUS:
+  Time:             {current_time}
+  Date:             {current_date}
+  Mood (detected):  {mood}
+  Weather:          {weather_summary}
+  Festival Today:   {festival_today or 'None'}
+  Tithi Today:      {tithi_today or 'Unknown'}
+
+MEMORY:
+{memory_lines}
+
+RECENT HISTORY:
+{conversation_lines}
+
+RUNTIME RULES:
+- Reply in at most 2 short sentences.
+- Reply in {response_language_name} and match the user's latest message language and script.
+- Use silent markers when relevant: [HEALTH_LOG: x] [MOOD_LOG: x] [ALERT: x]
+- Never say you are an AI.
+- Be warm, simple, patient, and natural.
+"""
+    return base_prompt + injected
+
+
+async def _post_caretaker_alert(user_id: str, reason: str) -> None:
+    try:
+        async with httpx.AsyncClient(timeout=12) as client:
+            await client.post(
+                f"{settings.alerts_service_url}/sos",
+                json={
+                    "user_id": user_id,
+                    "reason": reason,
+                    "source": "ai_service",
+                },
+            )
+    except Exception:
+        pass
+
+
+@app.get("/culture/library")
+async def culture_library(q: str = "", category: str = ""):
+    query = (q or category or "").strip()
+    items = search_library(query, limit=12)
+    if category:
+      items = [item for item in items if str(item.get("category") or "").lower() == category.strip().lower()] or items
+    return {"status": "success", "items": items}
+
+
+@app.get("/culture/daily/{user_id}")
+async def culture_daily(user_id: str):
+    context = await _fetch_user_context(user_id)
+    profile = context["user"]
+    lat = profile.get("lat")
+    lon = profile.get("lon")
+    try:
+        lat_f = float(lat) if lat is not None else None
+        lon_f = float(lon) if lon is not None else None
+    except Exception:
+        lat_f, lon_f = None, None
+    if lat_f is None or lon_f is None:
+        lat_f, lon_f = _default_coords_for_region(str(profile.get("region") or ""))
+
+    festival_today = ""
+    tithi_today = ""
+    try:
+        cal = await fetch_tithi_festival(
+            base_url=settings.vedastro_base_url,
+            lat=lat_f,
+            lon=lon_f,
+            tz_offset=settings.default_tz_offset,
+            ayanamsa=settings.vedastro_ayanamsa,
+        )
+        festival_today = cal.festival
+        tithi_today = cal.tithi
+    except Exception:
+        pass
+
+    _, language_name = _lang_for_user(profile)
+    return {
+        "status": "success",
+        "calendar": build_daily_calendar(
+            language=language_name,
+            region=str(profile.get("region") or ""),
+            tithi=tithi_today,
+            festival=festival_today,
+        ),
+        "stories": search_library(str(profile.get("preferences") or profile.get("language") or ""), limit=6),
+    }
+
+
+@app.post("/report/analyze")
+async def analyze_report(payload: dict[str, Any]):
+    user_id = str(payload.get("user_id") or "").strip()
+    report_text = _clean_text(str(payload.get("report_text") or ""))
+    file_name = str(payload.get("file_name") or "report").strip() or "report"
+    if not report_text:
+        return {"status": "success", **_fallback_report_analysis("", {})}
+
+    context = await _fetch_user_context(user_id) if user_id else {"user": {}, "medicines": []}
+    profile = context.get("user") or {}
+    medicines = ", ".join(
+        f"{med.get('name', 'Medicine')} {med.get('dose', '')}".strip()
+        for med in (context.get("medicines") or [])[:8]
+    ) or "No medicines listed"
+
+    system = (
+        "You are Bhumi, helping a family manager review a parent's medical report. "
+        "Do not diagnose. Keep the answer practical, warm, and short. "
+        "Return exactly two sections using this format:\n"
+        "SUMMARY: <1-2 short sentences>\n"
+        "ADVICE: <1-2 short sentences with safe next steps, reminders, or medicine verification guidance>"
+    )
+    user_prompt = (
+        f"Parent name: {profile.get('name', 'Parent')}\n"
+        f"Current medicines: {medicines}\n"
+        f"Report file: {file_name}\n"
+        f"Extracted report text:\n{report_text}"
+    )
+
+    raw = ""
+    if settings.groq_api_key:
+        try:
+            raw = await groq_chat_completion(
+                settings.groq_api_key,
+                model=settings.groq_model,
+                system=system,
+                user=user_prompt,
+            )
+        except Exception:
+            raw = ""
+    if not raw and settings.gemini_api_key:
+        try:
+            raw = await gemini_generate_text(
+                api_key=settings.gemini_api_key,
+                model=settings.gemini_model,
+                system=system,
+                user=user_prompt,
+            )
+        except Exception:
+            raw = ""
+
+    parsed = _parse_report_analysis(raw, report_text, profile)
+
+    extract_system = (
+        "Extract prescribed medicines from this medical report text. "
+        "Return one medicine per line with this exact pipe format and nothing else:\n"
+        "name | dose | times comma separated in HH:MM if explicitly present else blank | instructions | condition"
+    )
+    extract_user = f"Report text:\n{report_text}"
+    structured_raw = ""
+    if settings.groq_api_key:
+        try:
+            structured_raw = await groq_chat_completion(
+                settings.groq_api_key,
+                model=settings.groq_model,
+                system=extract_system,
+                user=extract_user,
+            )
+        except Exception:
+            structured_raw = ""
+    if not structured_raw and settings.gemini_api_key:
+        try:
+            structured_raw = await gemini_generate_text(
+                api_key=settings.gemini_api_key,
+                model=settings.gemini_model,
+                system=extract_system,
+                user=extract_user,
+            )
+        except Exception:
+            structured_raw = ""
+
+    return {"status": "success", **parsed, "suggested_medicines": _parse_medicine_suggestions(structured_raw, report_text)}
 
 
 @app.post("/voice")
 async def voice(request: Request):
-    """
-    AI pipeline endpoint.
-    Currently uses TEXT path; audio is accepted but STT is not enabled yet (optional heavy deps).
-    """
     user_id = "demo"
     text: str | None = None
     audio: UploadFile | None = None
@@ -92,9 +676,10 @@ async def voice(request: Request):
                 lat = None
                 lon = None
 
-    user_text = (text or "").strip()
+    user_text = _clean_text(text or "")
     audio_bytes: bytes | None = None
     emotion_label = "neutral"
+
     if audio is not None:
         try:
             audio_bytes = await audio.read()
@@ -103,31 +688,60 @@ async def voice(request: Request):
 
     if not user_text and audio_bytes:
         try:
-            stt = await transcribe_audio_bytes(audio_bytes, filename=audio.filename)
-            user_text = (stt.text or "").strip()
+            stt = await transcribe_audio_bytes(
+                audio_bytes,
+                filename=audio.filename,
+                elevenlabs_api_key=settings.elevenlabs_api_key,
+                elevenlabs_model_id=settings.elevenlabs_stt_model_id,
+            )
+            user_text = _clean_text(stt.text or "")
         except Exception:
             return JSONResponse(
                 status_code=400,
-                content={"status": "error", "message": "Audio provided but STT not enabled. Install Whisper or send text."},
+                content={"status": "error", "message": "Audio provided but STT is not enabled yet. Please type or enable Whisper."},
             )
 
     if audio_bytes:
         try:
-            emo = await infer_emotion_from_audio_bytes(audio_bytes)
-            emotion_label = emo.label or "neutral"
+            emotion = await infer_emotion_from_audio_bytes(audio_bytes)
+            emotion_label = emotion.label or "neutral"
         except Exception:
             emotion_label = "neutral"
+
     if not user_text:
         return JSONResponse(status_code=400, content={"status": "error", "message": "Missing text"})
 
-    base_prompt = load_system_prompt()
-    if not base_prompt:
-        base_prompt = "You are ElderMind. Be warm. Max 2 sentences."
+    try:
+        context = await _fetch_user_context(user_id)
+    except Exception:
+        context = {
+            "user": {"user_id": user_id, "name": "Friend", "language": "Hindi", "region": "Karnataka"},
+            "medicines": [],
+            "recent_conversations": [],
+            "memories": [],
+            "activity": {},
+        }
 
-    # Geo-aware context injection (per prompt.md placeholders)
+    profile = context["user"]
+    recent_conversations = context["recent_conversations"]
+    medicines = context["medicines"]
+    memories = context["memories"]
+
+    if lat is None or lon is None:
+        try:
+            lat = float(profile.get("lat")) if profile.get("lat") is not None else None
+            lon = float(profile.get("lon")) if profile.get("lon") is not None else None
+        except Exception:
+            lat = None
+            lon = None
+    if lat is None or lon is None:
+        lat, lon = _default_coords_for_region(str(profile.get("region") or ""))
+
+    base_prompt = load_system_prompt() or "You are ElderMind. Be warm, short, and comforting."
     weather_summary = "unknown"
     festival_today = ""
     tithi_today = ""
+
     if settings.openweather_api_key and lat is not None and lon is not None:
         try:
             wx = await fetch_openweather_summary(api_key=settings.openweather_api_key, lat=lat, lon=lon, lang="en")
@@ -150,22 +764,43 @@ async def voice(request: Request):
             festival_today = ""
             tithi_today = ""
 
-    # lightweight tool hint: if Tavily configured, we can fetch 1-2 sources for “webby” queries
     tool_context = ""
-    if settings.tavily_api_key and any(k in user_text.lower() for k in ["weather", "news", "latest", "today", "price"]):
-        results = await tavily_search(settings.tavily_api_key, user_text, max_results=3)
-        snippets = []
-        for r in results[:3]:
-            snippets.append(f"- {r.get('title','')}: {r.get('content','')[:240]} ({r.get('url','')})")
-        if snippets:
-            tool_context = "\n\nWEB_CONTEXT:\n" + "\n".join(snippets)
+    if settings.tavily_api_key and any(word in user_text.lower() for word in ("weather", "news", "latest", "today", "price")):
+        try:
+            results = await tavily_search(settings.tavily_api_key, user_text, max_results=3)
+            if results:
+                tool_context = "\nWEB_CONTEXT:\n" + "\n".join(
+                    f"- {item.get('title', '')}: {str(item.get('content', ''))[:180]} ({item.get('url', '')})"
+                    for item in results[:3]
+                )
+        except Exception:
+            tool_context = ""
 
-    injected_context = "\n\nCURRENT_STATUS:\n"
-    injected_context += f"Weather: {weather_summary}\n"
-    injected_context += f"Festival Today: {festival_today}\n"
-    injected_context += f"Tithi Today: {tithi_today}\n"
+    cultural_context = ""
+    if any(word in user_text.lower() for word in ("ramayana", "mahabharata", "gita", "doha", "chalisa", "story", "stories", "panchatantra", "birbal", "tenali")):
+        matches = search_library(user_text, limit=3)
+        if matches:
+            cultural_context = "\nCULTURAL_LIBRARY:\n" + "\n".join(
+                f"- {item.get('tradition')}: {item.get('title')} - {item.get('summary')} Moral: {item.get('moral')}"
+                for item in matches
+            )
 
-    system = base_prompt + injected_context + tool_context + "\n\nRULE: Reply in max 2 sentences. Use silent markers [HEALTH_LOG: x] [MOOD_LOG: y] when relevant."
+    provisional = parse_markers(user_text)
+    health_logs = _detect_health_logs(user_text)
+    mood = _derive_mood(user_text, emotion_label, provisional)
+    response_lang_code, response_language_name = _detect_runtime_language(user_text, profile)
+    system = _build_system_prompt(
+        base_prompt=base_prompt + tool_context + cultural_context,
+        profile=profile,
+        medicines=medicines,
+        memories=memories,
+        recent_conversations=recent_conversations,
+        mood=mood,
+        weather_summary=weather_summary,
+        festival_today=festival_today,
+        tithi_today=tithi_today,
+        response_language_name=response_language_name,
+    )
 
     raw = ""
     if settings.groq_api_key:
@@ -173,8 +808,6 @@ async def voice(request: Request):
             raw = await groq_chat_completion(settings.groq_api_key, model=settings.groq_model, system=system, user=user_text)
         except Exception:
             raw = ""
-    else:
-        raw = ""
 
     if not raw and settings.gemini_api_key:
         try:
@@ -183,56 +816,84 @@ async def voice(request: Request):
             raw = ""
 
     if not raw:
-        raw = _fallback_reply(user_text)
-    parsed = parse_markers(raw)
+        raw = _fallback_reply(user_text, profile, mood, health_logs, [], response_lang_code)
 
-    lang = _lang_for_user(user_id)
-    mp3_name = synthesize_mp3(parsed.cleaned_text or raw, lang="en" if lang == "en" else "hi", out_dir=settings.media_dir)
+    parsed = parse_markers(raw)
+    combined_health_logs = list(dict.fromkeys(health_logs + parsed.health_logs))
+    final_mood = parsed.mood_logs[-1] if parsed.mood_logs else mood
+    alerts = _derive_alerts(user_text, combined_health_logs, final_mood, parsed, recent_conversations)
+
+    if alerts and not parsed.alerts:
+        raw = f"{parsed.cleaned_text or raw} [ALERT: {alerts[0]}]"
+        parsed = parse_markers(raw)
+
+    speech_text = parsed.cleaned_text or raw
+    mp3_name = synthesize_mp3(
+        speech_text,
+        lang=response_lang_code if response_lang_code != "en" else "en",
+        out_dir=settings.media_dir,
+        elevenlabs_api_key=settings.elevenlabs_api_key,
+        elevenlabs_voice_id=settings.elevenlabs_tts_voice_id,
+        elevenlabs_model_id=settings.elevenlabs_tts_model_id,
+    )
     audio_url = f"{settings.base_url}/media/{mp3_name}"
 
-    # Persist conversation + extracted logs (best-effort)
+    memory_items = _extract_memories(user_text, profile)
     try:
-        async with __import__("httpx").AsyncClient(timeout=10) as client:  # avoid new dependency import patterns
+        async with httpx.AsyncClient(timeout=12) as client:
             await client.post(
                 f"{settings.data_service_url}/conversations/{user_id}",
                 json={
                     "ts": datetime.now(timezone.utc).isoformat(),
                     "text_input": user_text,
-                    "ai_response": parsed.cleaned_text or raw,
-                    "mood": (parsed.mood_logs[-1] if parsed.mood_logs else "okay"),
+                    "ai_response": speech_text,
+                    "mood": final_mood,
                     "emotion": emotion_label,
-                    "health_logs": parsed.health_logs,
-                    "mood_logs": parsed.mood_logs,
-                    "alerts": parsed.alerts,
-                    "context": {"weather": weather_summary, "festival": festival_today, "tithi": tithi_today},
+                    "health_logs": combined_health_logs,
+                    "mood_logs": [final_mood],
+                    "alerts": alerts,
+                    "source": "voice",
+                    "context": {
+                        "weather": weather_summary,
+                        "festival": festival_today,
+                        "tithi": tithi_today,
+                    },
                 },
             )
-            for a in parsed.alerts:
+            for issue in alerts:
                 await client.post(
                     f"{settings.data_service_url}/alerts/{user_id}",
                     json={
                         "time_created": datetime.now(timezone.utc).isoformat(),
                         "type": "ai_marker",
-                        "message": a,
-                        "severity": 75,
+                        "message": issue,
+                        "severity": 90 if issue in {"urgent_health", "urgent_help"} else 70,
                     },
                 )
+            for memory in memory_items:
+                await client.post(f"{settings.data_service_url}/memory/{user_id}", json=memory)
     except Exception:
         pass
 
+    if alerts:
+        await _post_caretaker_alert(user_id, ", ".join(alerts))
+
     return {
         "status": "success",
-        "text": parsed.cleaned_text or raw,
+        "text": speech_text,
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "mood": (parsed.mood_logs[-1] if parsed.mood_logs else "okay"),
+        "mood": final_mood,
         "emotion": emotion_label,
-        "alert_sent": bool(parsed.alerts),
-        "alert_severity": 75 if parsed.alerts else 0,
+        "response_language": response_language_name,
+        "response_language_code": response_lang_code,
+        "response_speech_lang": _browser_lang_for_code(response_lang_code),
+        "alert_sent": bool(alerts),
+        "alert_severity": 90 if any(item in {"urgent_health", "urgent_help"} for item in alerts) else (70 if alerts else 0),
         "logs": {
-            "health": parsed.health_logs,
-            "mood": parsed.mood_logs,
-            "alerts": parsed.alerts,
+            "health": combined_health_logs,
+            "mood": [final_mood],
+            "alerts": alerts,
+            "memories": memory_items,
         },
         "audio_url": audio_url,
     }
-

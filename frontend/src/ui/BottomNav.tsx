@@ -6,7 +6,7 @@ import type React from 'react'
 type NavItem = {
   href: string
   label: string
-  key: 'home' | 'medication' | 'activity' | 'alert' | 'summary'
+  key: 'home' | 'medication' | 'alert' | 'summary' | 'settings'
   Icon: (props: React.SVGProps<SVGSVGElement>) => React.ReactNode
 }
 
@@ -24,15 +24,9 @@ const items: NavItem[] = [
     Icon: (p) => <PillSticker {...p} />,
   },
   {
-    key: 'activity',
-    href: '/activity.html',
-    label: 'Status',
-    Icon: (p) => <SparkleSticker {...p} />,
-  },
-  {
     key: 'alert',
     href: '/alert.html',
-    label: 'Help',
+    label: 'Health',
     Icon: (p) => <HeartPulseSticker {...p} />,
   },
   {
@@ -41,11 +35,18 @@ const items: NavItem[] = [
     label: 'Week',
     Icon: (p) => <SparkleSticker {...p} />,
   },
+  {
+    key: 'settings',
+    href: '/settings.html',
+    label: 'Settings',
+    Icon: (p) => <SparkleSticker {...p} />,
+  },
 ]
 
 function currentKey(): NavItem['key'] {
   const page = (document.body.dataset.page || 'home').toLowerCase()
-  if (page === 'medication' || page === 'activity' || page === 'alert' || page === 'summary') return page
+  if (page === 'activity' || page === 'support' || page === 'caregiver' || page === 'caretaker') return 'alert'
+  if (page === 'medication' || page === 'alert' || page === 'summary' || page === 'settings') return page
   return 'home'
 }
 
@@ -77,7 +78,7 @@ export function BottomNav() {
       className="fixed bottom-3 left-0 right-0 z-30 mx-auto w-[min(430px,calc(100%-24px))]"
     >
       <nav className="glass rounded-2xl shadow-float ring-1 ring-black/5">
-        <ul className="grid grid-cols-5 gap-1 p-2">
+          <ul className="grid grid-cols-5 gap-1 p-2">
           {items.map((it) => {
             const isActive = it.key === active
             return (
@@ -106,4 +107,3 @@ export function BottomNav() {
     </div>
   )
 }
-

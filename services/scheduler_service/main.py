@@ -1,17 +1,25 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime
+import random
 
 import httpx
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
 
 
-GATEWAY_URL = os.getenv("GATEWAY_URL", "http://127.0.0.1:8000")
+GATEWAY_URL = os.getenv("GATEWAY_URL", "http://127.0.0.1:8010")
 DEMO_FAST_SCHEDULE = os.getenv("DEMO_FAST_SCHEDULE", "1") == "1"
 
-app = FastAPI(title="ElderMind Scheduler Service", version="0.1.0")
+CHECKIN_VARIATIONS = [
+    "Sab theek hai na?",
+    "Khaana kha liya?",
+    "Paani to pee liya?",
+    "Aaj mood kaisa hai?",
+    "Thodi der aaraam kiya kya?",
+]
+
+app = FastAPI(title="ElderMind Scheduler Service", version="0.2.0")
 sched = AsyncIOScheduler()
 
 
@@ -20,20 +28,29 @@ async def health():
     return {"status": "ok", "service": "scheduler", "running": sched.running}
 
 
-async def _poke_checkin():
-    # check-in “voice” turn using text (gateway proxies to ai_service)
+async def _post_voice(text: str) -> None:
     async with httpx.AsyncClient(timeout=20) as client:
-        await client.post(f"{GATEWAY_URL}/voice", data={"user_id": "demo", "text": "Kaise ho?"})
+        await client.post(f"{GATEWAY_URL}/voice", data={"user_id": "demo", "text": text})
+
+
+async def _poke_checkin():
+    await _post_voice(random.choice(CHECKIN_VARIATIONS))
 
 
 async def _morning_greeting():
-    async with httpx.AsyncClient(timeout=20) as client:
-        await client.post(f"{GATEWAY_URL}/voice", data={"user_id": "demo", "text": "Jai Shri Ram! Good morning. Kaise neend aayi?"})
+    await _post_voice("Good morning. Kaise neend aayi? Aaj ka din shanti se shuru karte hain.")
 
 
 async def _cultural_prompt():
-    async with httpx.AsyncClient(timeout=20) as client:
-        await client.post(f"{GATEWAY_URL}/voice", data={"user_id": "demo", "text": "Ek sundar doha sunna chahenge?"})
+    await _post_voice("Ek sundar doha sunna chahenge?")
+
+
+async def _evening_check():
+    await _post_voice("Shaam ho gayi. Aaj ka din kaisa raha?")
+
+
+async def _bedtime_prompt():
+    await _post_voice("Sone ka waqt ho gaya. Koi chhoti si prarthana sunenge?")
 
 
 async def _weekly_report_ping():
@@ -43,18 +60,20 @@ async def _weekly_report_ping():
 
 @app.on_event("startup")
 async def _startup():
-    # In demo mode, schedules run fast so you can observe flows.
-    # In real mode, use cron-like schedules.
     if DEMO_FAST_SCHEDULE:
         sched.add_job(_poke_checkin, "interval", minutes=2, id="checkin_demo")
         sched.add_job(_cultural_prompt, "interval", minutes=5, id="cultural_demo")
         sched.add_job(_weekly_report_ping, "interval", minutes=7, id="weekly_demo")
         sched.add_job(_morning_greeting, "interval", minutes=11, id="morning_demo")
+        sched.add_job(_evening_check, "interval", minutes=13, id="evening_demo")
+        sched.add_job(_bedtime_prompt, "interval", minutes=17, id="bedtime_demo")
     else:
         sched.add_job(_poke_checkin, "interval", hours=2, id="checkin_2h")
         sched.add_job(_cultural_prompt, "cron", hour=15, minute=0, id="cultural_3pm")
         sched.add_job(_weekly_report_ping, "cron", day_of_week="mon", hour=9, minute=0, id="weekly_mon")
         sched.add_job(_morning_greeting, "cron", hour=7, minute=0, id="morning_7am")
+        sched.add_job(_evening_check, "cron", hour=18, minute=0, id="evening_6pm")
+        sched.add_job(_bedtime_prompt, "cron", hour=21, minute=0, id="bedtime_9pm")
     sched.start()
 
 
@@ -62,4 +81,3 @@ async def _startup():
 async def _shutdown():
     if sched.running:
         sched.shutdown(wait=False)
-

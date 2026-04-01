@@ -1,0 +1,31 @@
+{
+  "savitri-devi": [
+    {
+      "id": "868eea66-cd33-4d5c-baa8-3f5585726469",
+      "user_id": "savitri-devi",
+      "title": "Amlodipine reminder",
+      "time_iso": "2026-04-02T08:00:00+05:30",
+      "label": "Time to take Amlodipine 5mg.",
+      "created_at": "2026-04-01T17:12:03.903733+00:00",
+      "source": "medicine_plan:med-1:08:00"
+    },
+    {
+      "id": "94d72e1a-798c-4e99-9261-dfc83a62d79d",
+      "user_id": "savitri-devi",
+      "title": "Metformin reminder",
+      "time_iso": "2026-04-02T09:00:00+05:30",
+      "label": "Time to take Metformin 500mg.",
+      "created_at": "2026-04-01T17:12:03.905385+00:00",
+      "source": "medicine_plan:med-2:09:00"
+    },
+    {
+      "id": "32834fcd-5d34-47e8-8428-101bf7326215",
+      "user_id": "savitri-devi",
+      "title": "Amlodipine reminder",
+      "time_iso": "2026-04-02T20:00:00+05:30",
+      "label": "Time to take Amlodipine 5mg.",
+      "created_at": "2026-04-01T17:12:03.904429+00:00",
+      "source": "medicine_plan:med-1:20:00"
+    }
+  ]
+}

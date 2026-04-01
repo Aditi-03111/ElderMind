@@ -6,10 +6,12 @@ import type React from 'react'
 export function AppShell({
   title,
   subtitle,
+  showNav = true,
   children,
 }: {
   title: string
   subtitle?: string
+  showNav?: boolean
   children: React.ReactNode
 }) {
   const ref = useRef<HTMLDivElement | null>(null)
@@ -36,7 +38,7 @@ export function AppShell({
         <header className="mb-4">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-sm font-semibold tracking-wide text-ink/60">ElderMind</p>
+              <p className="text-sm font-semibold tracking-wide text-ink/60">Bhumi</p>
               <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-ink">{title}</h1>
               {subtitle ? <p className="mt-1 text-base text-ink/70">{subtitle}</p> : null}
             </div>
@@ -46,8 +48,7 @@ export function AppShell({
 
         <div className="space-y-4">{children}</div>
       </div>
-      <BottomNav />
+      {showNav ? <BottomNav /> : null}
     </>
   )
 }
-

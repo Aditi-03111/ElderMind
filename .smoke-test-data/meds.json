@@ -1,0 +1,25 @@
+{
+  "savitri-devi": [
+    {
+      "id": "med-1",
+      "name": "Amlodipine",
+      "dose": "5mg",
+      "times": [
+        "08:00",
+        "20:00"
+      ],
+      "instructions": "After food",
+      "condition": "BP"
+    },
+    {
+      "id": "med-2",
+      "name": "Metformin",
+      "dose": "500mg",
+      "times": [
+        "09:00"
+      ],
+      "instructions": "After breakfast",
+      "condition": "Sugar"
+    }
+  ]
+}

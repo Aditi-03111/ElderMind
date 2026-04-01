@@ -1,0 +1,12 @@
+ForEach-Object : Cannot bind parameter 'RemainingScripts'. Cannot convert the "Set-Location" value of type 
+"System.String" to type "System.Management.Automation.ScriptBlock".
+At line:1 char:65
++ ...  'C:\Users\anike\Desktop\team-pixel-pioneers\.env' | ForEach-Object {
++                                                          ~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (:) [ForEach-Object], ParameterBindingException
+    + FullyQualifiedErrorId : CannotConvertArgumentNoMessage,Microsoft.PowerShell.Commands.ForEachObjectCommand
+ 
+INFO:     Started server process [11364]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8003 (Press CTRL+C to quit)

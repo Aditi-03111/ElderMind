@@ -3,6 +3,27 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $root
 
+function Import-DotEnv([string]$path) {
+  if (-not (Test-Path $path)) { return }
+  Write-Host "Loading env from $path"
+  Get-Content $path | ForEach-Object {
+    $line = $_.Trim()
+    if (-not $line) { return }
+    if ($line.StartsWith("#")) { return }
+    $idx = $line.IndexOf("=")
+    if ($idx -lt 1) { return }
+    $name = $line.Substring(0, $idx).Trim()
+    $value = $line.Substring($idx + 1).Trim()
+    if ($value.StartsWith('\"') -and $value.EndsWith('\"')) {
+      $value = $value.Substring(1, $value.Length - 2)
+    }
+    if ($name) { [System.Environment]::SetEnvironmentVariable($name, $value, 'Process') }
+  }
+}
+
+# Load repo-root .env if present (DO NOT COMMIT real keys)
+Import-DotEnv "$root\.env"
+
 if (-not (Test-Path ".\\.venv")) {
   python -m venv .venv
 }
@@ -17,6 +38,8 @@ pip install -r requirements.txt
 
 Write-Host "Starting services..."
 
+# NOTE: child processes inherit environment variables set above.
+# Do NOT call Import-DotEnv inside spawned shells (they don't know the function).
 Start-Process powershell -ArgumentList "-NoExit","-Command","cd '$root'; . .\.venv\Scripts\Activate.ps1; uvicorn services.ai_service.main:app --port 8001"
 Start-Process powershell -ArgumentList "-NoExit","-Command","cd '$root'; . .\.venv\Scripts\Activate.ps1; uvicorn services.data_service.main:app --port 8002"
 Start-Process powershell -ArgumentList "-NoExit","-Command","cd '$root'; . .\.venv\Scripts\Activate.ps1; uvicorn services.alerts_service.main:app --port 8003"

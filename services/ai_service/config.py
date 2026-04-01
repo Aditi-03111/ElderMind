@@ -24,6 +24,10 @@ class AISettings:
 
     gemini_api_key: str | None = _env("GEMINI_API_KEY")
     gemini_model: str = _env("GEMINI_MODEL", "gemini-1.5-flash") or "gemini-1.5-flash"
+    elevenlabs_api_key: str | None = _env("ELEVENLABS_API_KEY")
+    elevenlabs_tts_voice_id: str = _env("ELEVENLABS_TTS_VOICE_ID", "JBFqnCBsd6RMkjVDRZzb") or "JBFqnCBsd6RMkjVDRZzb"
+    elevenlabs_tts_model_id: str = _env("ELEVENLABS_TTS_MODEL_ID", "eleven_multilingual_v2") or "eleven_multilingual_v2"
+    elevenlabs_stt_model_id: str = _env("ELEVENLABS_STT_MODEL_ID", "scribe_v2") or "scribe_v2"
 
     openweather_api_key: str | None = _env("OPENWEATHER_API_KEY")
     vedastro_base_url: str = _env("VEDASTRO_BASE_URL", "https://api.vedastro.org") or "https://api.vedastro.org"
@@ -34,7 +38,7 @@ class AISettings:
     base_url: str = _env("BASE_URL", "http://127.0.0.1:8010") or "http://127.0.0.1:8010"
 
     data_service_url: str = _env("DATA_SERVICE_URL", "http://127.0.0.1:8002") or "http://127.0.0.1:8002"
+    alerts_service_url: str = _env("ALERTS_SERVICE_URL", "http://127.0.0.1:8003") or "http://127.0.0.1:8003"
 
 
 settings = AISettings()
-

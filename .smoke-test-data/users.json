@@ -1,0 +1,52 @@
+{
+  "savitri-devi": {
+    "user_id": "savitri-devi",
+    "name": "Savitri Devi",
+    "age": 72,
+    "language": "Hindi",
+    "region": "Karnataka",
+    "city": "Bengaluru",
+    "origin": "Mysuru",
+    "wake_time": "06:00",
+    "sleep_time": "21:00",
+    "caretaker_name": "Rahul",
+    "caretaker_phone": "+91-9449398356",
+    "phone": "+91-9888800001",
+    "healthcare_phone": "",
+    "conditions": [],
+    "allergies": [],
+    "preferences": [],
+    "family_contacts": [
+      {
+        "id": "rahul-family-example-com",
+        "name": "Rahul",
+        "relation": "Son",
+        "role": "support",
+        "phone": "+91-9449398356",
+        "email": "rahul.family@example.com"
+      },
+      {
+        "id": "aniket-helper-example-com",
+        "name": "Aniket Helper",
+        "relation": "Caretaker",
+        "role": "support",
+        "phone": "+91-9449398356",
+        "email": "aniket.helper@example.com"
+      }
+    ],
+    "settings": {
+      "history_enabled": true,
+      "location_enabled": true,
+      "wake_word_enabled": true,
+      "wake_words": [
+        "bhumi",
+        "hey bhumi",
+        "hi bhumi",
+        "hello bhumi"
+      ],
+      "auto_send_on_pause": true
+    },
+    "caregiver_name": "Rahul",
+    "caregiver_phone": "+91-9449398356"
+  }
+}

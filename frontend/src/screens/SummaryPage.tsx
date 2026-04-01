@@ -1,54 +1,62 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { gsap } from 'gsap'
 import { AppShell } from '../ui/AppShell'
+import { AuthPanel } from '../ui/AuthPanel'
 import { Card } from '../ui/Card'
 import { PressableButton } from '../ui/Pressable'
 import { SparkleSticker } from '../ui/stickers'
-import { getWeeklyReport, type WeeklyReport } from '../lib/api'
+import { getWeeklyReport, type AppSession, type WeeklyReport } from '../lib/api'
+import { getStoredSession } from '../lib/session'
+
 
 export function SummaryPage() {
+  const [session] = useState<AppSession | null>(() => getStoredSession())
   const [loading, setLoading] = useState(true)
   const [report, setReport] = useState<WeeklyReport | null>(null)
   const [error, setError] = useState('')
   const barsRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
+    if (!session) return
     ;(async () => {
       try {
         setLoading(true)
         setError('')
-        const r = await getWeeklyReport('demo')
-        setReport(r)
+        setReport(await getWeeklyReport(session.user_id))
       } catch (e: unknown) {
         setError((e as { message?: string } | undefined)?.message || 'Failed to load report')
       } finally {
-        window.setTimeout(() => setLoading(false), 450)
+        setLoading(false)
       }
     })()
-  }, [])
+  }, [session])
 
   useLayoutEffect(() => {
     const el = barsRef.current
     if (!el || loading) return
     const ctx = gsap.context(() => {
-      gsap.fromTo(
-        el.querySelectorAll('[data-bar]'),
-        { scaleY: 0.3, opacity: 0.2 },
-        { scaleY: 1, opacity: 1, duration: 0.7, stagger: 0.05, ease: 'elastic.out(1,0.6)' },
-      )
+      gsap.fromTo(el.querySelectorAll('[data-bar]'), { scaleY: 0.3, opacity: 0.2 }, { scaleY: 1, opacity: 1, duration: 0.7, stagger: 0.05, ease: 'elastic.out(1,0.6)' })
     }, el)
     return () => ctx.revert()
-  }, [loading])
+  }, [loading, report?.mood_trend])
 
-  const moodBars = [0.7, 0.8, 0.65, 0.78, 0.83, 0.76, 0.81]
+  if (!session) {
+    return (
+      <AppShell title="Weekly" subtitle="Login required." showNav={false}>
+        <AuthPanel onReady={() => window.location.reload()} />
+      </AppShell>
+    )
+  }
 
   return (
-    <AppShell title="Weekly" subtitle="A soft summary you can trust.">
+    <AppShell title="Weekly" subtitle="A live summary based on history, mood, medicine, and alerts.">
       <Card>
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-lg font-extrabold tracking-tight text-ink">Week of Apr 1–7</p>
-            <p className="mt-1 text-sm text-ink/60">Short. Clear. No scary words.</p>
+            <p className="text-lg font-extrabold tracking-tight text-ink">
+              Week of {report?.week_start || '--'} to {report?.week_end || '--'}
+            </p>
+            <p className="mt-1 text-sm text-ink/60">This view is now driven by stored conversations and medicine logs.</p>
           </div>
           <div className="h-14 w-14 shrink-0">
             <SparkleSticker className="h-14 w-14" />
@@ -67,15 +75,12 @@ export function SummaryPage() {
             <p className="mt-3 text-sm font-semibold text-danger">{error}</p>
           ) : (
             <div ref={barsRef} className="mt-3 grid grid-cols-7 items-end gap-2">
-              {moodBars.map((m, i) => (
+              {(report?.mood_trend || []).map((value, i) => (
                 <div
                   key={i}
                   data-bar
-                  style={{ height: `${Math.round(46 + m * 46)}px` }}
-                  className={[
-                    'origin-bottom rounded-xl2 shadow-soft ring-1 ring-black/5',
-                    i === 6 ? 'bg-mint/35' : 'bg-sky/28',
-                  ].join(' ')}
+                  style={{ height: `${Math.max(26, value)}px` }}
+                  className={['origin-bottom rounded-xl2 shadow-soft ring-1 ring-black/5', i === 6 ? 'bg-mint/35' : 'bg-sky/28'].join(' ')}
                   aria-hidden="true"
                 />
               ))}
@@ -89,55 +94,50 @@ export function SummaryPage() {
         <div className="mt-3 grid grid-cols-2 gap-2">
           <div className="rounded-2xl bg-white/70 p-3 shadow-soft ring-1 ring-black/5">
             <p className="text-xs font-bold tracking-wide text-ink/60">Medicines</p>
-            <p className="mt-1 text-2xl font-extrabold tracking-tight text-ink">
-              {report?.medicine_adherence ?? 95}%
-            </p>
-            <p className="mt-1 text-sm text-ink/60">Great routine.</p>
+            <p className="mt-1 text-2xl font-extrabold tracking-tight text-ink">{report?.medicine_adherence ?? 0}%</p>
           </div>
           <div className="rounded-2xl bg-white/70 p-3 shadow-soft ring-1 ring-black/5">
             <p className="text-xs font-bold tracking-wide text-ink/60">Activity</p>
             <p className="mt-1 text-2xl font-extrabold tracking-tight text-ink">
-              {report?.activity_steps_per_day ? `${Math.round(report.activity_steps_per_day / 100) / 10}k` : '4.2k'}
+              {report?.activity_steps_per_day ? `${Math.round(report.activity_steps_per_day / 100) / 10}k` : '0k'}
             </p>
-            <p className="mt-1 text-sm text-ink/60">Steps/day.</p>
           </div>
           <div className="rounded-2xl bg-white/70 p-3 shadow-soft ring-1 ring-black/5">
             <p className="text-xs font-bold tracking-wide text-ink/60">Sleep</p>
-            <p className="mt-1 text-2xl font-extrabold tracking-tight text-ink">
-              {report?.sleep_hours ?? 7.5}h
-            </p>
-            <p className="mt-1 text-sm text-ink/60">Stable.</p>
+            <p className="mt-1 text-2xl font-extrabold tracking-tight text-ink">{report?.sleep_hours ?? 0}h</p>
           </div>
           <div className="rounded-2xl bg-white/70 p-3 shadow-soft ring-1 ring-black/5">
             <p className="text-xs font-bold tracking-wide text-ink/60">Alerts</p>
-            <p className="mt-1 text-2xl font-extrabold tracking-tight text-ink">0</p>
-            <p className="mt-1 text-sm text-ink/60">All calm.</p>
+            <p className="mt-1 text-2xl font-extrabold tracking-tight text-ink">{report?.alert_count ?? 0}</p>
           </div>
         </div>
       </Card>
 
       <Card>
-        <p className="text-lg font-extrabold tracking-tight text-ink">Gentle suggestions</p>
-        <p className="mt-1 text-sm text-ink/60">Small steps that feel doable.</p>
+        <p className="text-lg font-extrabold tracking-tight text-ink">Health issues noticed</p>
         <div className="mt-3 grid gap-2">
-          {(
-            report?.recommendations?.length
-              ? report.recommendations
-              : [
-                  '10-minute walk after lunch',
-                  'Call a friend for 5 minutes',
-                  'Play a short prayer / story',
-                ]
-          )
-            .slice(0, 3)
-            .map((r: string) => (
-            <PressableButton key={r} size="lg" variant="soft">
-              {r}
+          {(report?.health_issues || []).length ? (
+            (report?.health_issues || []).map((issue) => (
+              <PressableButton key={issue} size="lg" variant="soft">
+                {issue}
+              </PressableButton>
+            ))
+          ) : (
+            <p className="text-sm text-ink/60">No major issues were captured this week.</p>
+          )}
+        </div>
+      </Card>
+
+      <Card>
+        <p className="text-lg font-extrabold tracking-tight text-ink">Gentle suggestions</p>
+        <div className="mt-3 grid gap-2">
+          {(report?.recommendations || []).map((item) => (
+            <PressableButton key={item} size="lg" variant="soft">
+              {item}
             </PressableButton>
-            ))}
+          ))}
         </div>
       </Card>
     </AppShell>
   )
 }
-

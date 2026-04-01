@@ -1,0 +1,8 @@
+INFO:     127.0.0.1:56308 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56311 - "GET /user/demo HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56311 - "GET /medicine/demo HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56311 - "GET /conversations/demo?limit=12 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56311 - "GET /memory/demo?limit=12 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56311 - "GET /activity/demo HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63658 - "POST /conversations/demo HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57786 - "GET /report/weekly/demo HTTP/1.1" 200 OK

@@ -1,0 +1,29 @@
+{
+  "b87eca4d-30c6-4123-ad58-76863f1f4872": {
+    "session_id": "b87eca4d-30c6-4123-ad58-76863f1f4872",
+    "role": "support",
+    "user_id": "",
+    "caregiver_id": "056fcf06-6ac6-4c6e-929a-b1adbc89b220",
+    "display_name": "Bhumi Family",
+    "email": "bhumi.family9449@eldermind.app",
+    "created_at": "2026-04-01T17:19:17.493695+00:00"
+  },
+  "65a973e1-2a6c-4368-9e6e-416009aad378": {
+    "session_id": "65a973e1-2a6c-4368-9e6e-416009aad378",
+    "role": "support",
+    "user_id": "",
+    "caregiver_id": "056fcf06-6ac6-4c6e-929a-b1adbc89b220",
+    "display_name": "Bhumi Family",
+    "email": "bhumi.family9449@eldermind.app",
+    "created_at": "2026-04-01T17:48:35.922082+00:00"
+  },
+  "982443d7-d2a4-492e-b562-e7af790f0f9b": {
+    "session_id": "982443d7-d2a4-492e-b562-e7af790f0f9b",
+    "role": "support",
+    "user_id": "",
+    "caregiver_id": "056fcf06-6ac6-4c6e-929a-b1adbc89b220",
+    "display_name": "Bhumi Family",
+    "email": "bhumi.family9449@eldermind.app",
+    "created_at": "2026-04-01T17:50:26.469137+00:00"
+  }
+}

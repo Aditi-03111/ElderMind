@@ -1,4 +1,4 @@
-const CACHE_NAME = 'eldermind-v1'
+const CACHE_NAME = 'eldermind-v2'
 
 const CORE_ASSETS = [
   '/',
@@ -7,6 +7,7 @@ const CORE_ASSETS = [
   '/activity.html',
   '/alert.html',
   '/summary.html',
+  '/support.html',
   '/manifest.webmanifest',
   '/pwa-icon.svg',
 ]
@@ -30,6 +31,22 @@ self.addEventListener('fetch', (event) => {
   const request = event.request
   if (request.method !== 'GET') return
 
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      (async () => {
+        try {
+          const response = await fetch(request)
+          const cache = await caches.open(CACHE_NAME)
+          cache.put('/index.html', response.clone())
+          return response
+        } catch {
+          return (await caches.match('/index.html')) || Response.error()
+        }
+      })(),
+    )
+    return
+  }
+
   event.respondWith(
     (async () => {
       const cached = await caches.match(request)
@@ -52,4 +69,3 @@ self.addEventListener('fetch', (event) => {
     })(),
   )
 })
-
