@@ -10,6 +10,9 @@ from pydantic import BaseModel, Field
 import httpx
 import os
 import asyncio
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 class UserProfile(BaseModel):
@@ -100,12 +103,8 @@ app.add_middleware(
 
 
 # ---- In-memory demo store (swap with Firebase later) ----
-WHATSAPP_TOKEN = os.getenv("WHATSAPP_ACCESS_TOKEN", "")
-WHATSAPP_PHONE_ID = os.getenv("WHATSAPP_PHONE_NUMBER_ID", "")
-
-VAPI_API_KEY = os.getenv("VAPI_API_KEY", "")
-VAPI_ASSISTANT_ID = os.getenv("VAPI_ASSISTANT_ID", "")
-VAPI_PHONE_ID = os.getenv("VAPI_PHONE_NUMBER_ID", "")
+WHATSAPP_TOKEN = os.getenv("META_WHATSAPP_TOKEN", "")
+WHATSAPP_PHONE_ID = os.getenv("META_WHATSAPP_PHONE_NUMBER_ID", "")
 
 DEMO_USER = UserProfile(user_id="demo")
 
@@ -286,36 +285,6 @@ async def _send_whatsapp_message(to: str, message: str) -> str | None:
         except Exception as e:
             return f"whatsapp_error:{str(e)}"
 
-async def _send_vapi_call(to: str, text: str) -> str | None:
-    if not (VAPI_API_KEY and VAPI_ASSISTANT_ID and VAPI_PHONE_ID):
-        return "vapi_not_configured"
-        
-    url = "https://api.vapi.ai/call"
-    headers = {
-        "Authorization": f"Bearer {VAPI_API_KEY}",
-        "Content-Type": "application/json"
-    }
-    # Vapi allows passing a custom first message via the assistant overrides
-    payload = {
-        "assistantId": VAPI_ASSISTANT_ID,
-        "phoneNumberId": VAPI_PHONE_ID,
-        "customer": {
-            "number": to
-        },
-        "assistant": {
-            "firstMessage": text
-        }
-    }
-    
-    async with httpx.AsyncClient(timeout=15) as client:
-        try:
-            res = await client.post(url, headers=headers, json=payload)
-            res.raise_for_status()
-            return f"vapi_call:{res.json().get('id')}"
-        except Exception as e:
-            return f"vapi_error:{str(e)}"
-
-
 @app.post("/sos", response_model=SosResponse)
 async def sos(request: Request):
     ctype = (request.headers.get("content-type") or "").lower()
@@ -345,12 +314,9 @@ async def sos(request: Request):
     caregiver_phone = profile.caregiver_phone
     wa_result = await _send_whatsapp_message("+919999999999" if caregiver_phone == "+91-9999999999" else caregiver_phone, f"ElderMind SOS: {message} (severity {severity})")
     
-    # 3. Vapi Voice AI Call
-    vapi_result = await _send_vapi_call(caregiver_phone, f"This is an automated emergency SOS alert from ElderMind for {profile.name}. The reason for the alert is: {message}. Please check on them immediately.")
-
     return SosResponse(
         status="success",
-        alerts_sent_to=[caregiver_phone, wa_result, vapi_result],
+        alerts_sent_to=[caregiver_phone, wa_result],
         timestamp=_now(),
         severity=severity,
         message=f"Sent SOS to {profile.caregiver_name}.",
