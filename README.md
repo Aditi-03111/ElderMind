@@ -36,7 +36,7 @@ ElderMind is designed to run on free tiers where possible, with optional paid ad
 | Voice Output | gTTS | FREE |
 | Weather context (optional) | OpenWeather API | Free tier (provider-dependent) |
 | Calendar context (tithi) | VedAstro API (AllPlanetData) | Free tier (rate-limited) |
-| Database (optional) | Firebase Firestore (via `firebase-admin`) | Free tier |
+| Database | MongoDB Atlas | Free tier |
 | Alerts (optional) | Twilio | Trial credits / paid |
 | Scheduling (service) | APScheduler | FREE
 
@@ -56,7 +56,7 @@ ElderMind is designed to run on free tiers where possible, with optional paid ad
 ```bash
 # Clone repo
 git clone https://github.com/AdvayaBGSCET/team-pixel-pioneers.git
-cd eldermind
+cd team-pixel-pioneers
 
 # Create Python environment (Windows PowerShell)
 python -m venv .venv
@@ -65,6 +65,14 @@ python -m venv .venv
 # Install dependencies
 python -m pip install -U pip
 pip install -r requirements.txt
+
+# Copy env template and set Mongo before starting
+copy .env.example .env
+
+# Required for shared remote storage
+# DATA_STORE_MODE=mongo
+# MONGO_URI=your-mongodb-atlas-uri
+# MONGO_DB_NAME=eldermind
 
 # Start all microservices + gateway
 .\run_all.ps1
@@ -90,7 +98,15 @@ http://localhost:5173/index.html
 - Activity: `http://localhost:5173/activity.html`
 - Emergency: `http://localhost:5173/alert.html`
 - Weekly: `http://localhost:5173/summary.html`
-- Caregiver dashboard: `http://localhost:5173/caregiver.html`
+- Family dashboard: `http://localhost:5173/support.html`
+
+### Storage Mode
+
+ElderMind uses MongoDB as the primary shared database.
+
+- `DATA_STORE_MODE=mongo` stores family managers, parents, medicines, reminders, reports, chat history, alerts, and audit data in MongoDB.
+- `DATA_STORE_MODE=local` is only a fallback mode that writes JSON files into `data_store/`.
+- Config files now auto-load the repo root `.env`, so direct Python runs and test scripts use the same Mongo settings as `run_all.ps1`.
 
 ---
 
@@ -108,12 +124,12 @@ http://localhost:5173/index.html
 - Copy key → `.env`
 - **Free: 14,400 requests/day**
 
-### 3. **Firebase** (Database)
-- Go: https://console.firebase.google.com
-- Create new project
-- Download service account JSON
-- Copy to `.env`
-- **Free: 50k reads/20k writes daily**
+### 3. **MongoDB Atlas** (Database)
+- Go: https://www.mongodb.com/atlas
+- Create a free cluster
+- Copy the connection string into `MONGO_URI`
+- Set `DATA_STORE_MODE=mongo`
+- **Free shared tier is enough for development**
 
 ### 4. **Twilio** (SMS/WhatsApp)
 - Go: https://www.twilio.com/console
@@ -691,3 +707,18 @@ ElderMind serves our grandparents."
 ---
 
 **Built with ❤️ for elderly Indians**
+## Current Data Storage and Family Flow
+
+- MongoDB is the primary database for this project.
+- Set `DATA_STORE_MODE=mongo` and `MONGO_URI=...` in the repo root `.env`.
+- `data_store/*.json` is only a fallback path for local mode. If you see JSON data being created, the process was started without the Mongo env loaded.
+- Config files now auto-load the repo root `.env`, so direct Python runs use the same Mongo settings as `run_all.ps1`.
+
+Family flow:
+
+1. Family manager signs up with email and password.
+2. The family manager opens `support.html`.
+3. The family manager creates one or more parent profiles.
+4. Each parent gets a unique parent `user_id` and password.
+5. Parents sign in separately with that parent `user_id`.
+6. Parent medicines, reminders, reports, chats, alerts, caretakers, and audit history are stored in MongoDB when `DATA_STORE_MODE=mongo`.

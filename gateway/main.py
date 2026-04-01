@@ -189,6 +189,11 @@ async def support_workspace(account_id: str, active_user_id: str = ""):
     return await _proxy_json("GET", f"{settings.data_service_url}/support/account/{account_id}", params=params)
 
 
+@app.put("/support/account/{account_id}")
+async def update_support_account(account_id: str, payload: dict[str, Any]):
+    return await _proxy_json("PUT", f"{settings.data_service_url}/support/account/{account_id}", json=payload)
+
+
 @app.post("/support/account/{account_id}/elders")
 async def support_add_elder(account_id: str, payload: dict[str, Any]):
     return await _proxy_json("POST", f"{settings.data_service_url}/support/account/{account_id}/elders", json=payload)
