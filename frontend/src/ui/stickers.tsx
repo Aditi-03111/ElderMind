@@ -90,3 +90,56 @@ export function SparkleSticker(props: React.SVGProps<SVGSVGElement>) {
   )
 }
 
+export function BellSticker(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 120 120" fill="none" aria-hidden="true" {...props}>
+      <path
+        d="M60 102c16 0 28-5 28-12H32c0 7 12 12 28 12Z"
+        fill="rgba(42,34,40,0.16)"
+      />
+      <path
+        d="M40 86V56c0-17 9-30 20-30s20 13 20 30v30l8 6H32l8-6Z"
+        fill="rgba(255,255,255,0.82)"
+      />
+      <path
+        d="M46 86V58c0-12 6-22 14-22s14 10 14 22v28"
+        stroke="#FF9D5C"
+        strokeWidth="8"
+        strokeLinecap="round"
+      />
+      <circle cx="60" cy="24" r="7" fill="rgba(118,185,255,0.88)" />
+      <path d="M52 96c2 6 5 9 8 9s6-3 8-9" stroke="#2A2228" strokeWidth="6" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+export function FamilySticker({ tone = 'sky', ...props }: StickerProps) {
+  const accent = toneFill[tone]
+  return (
+    <svg viewBox="0 0 120 120" fill="none" aria-hidden="true" {...props}>
+      <circle cx="38" cy="42" r="16" fill="rgba(255,255,255,0.84)" />
+      <circle cx="82" cy="38" r="14" fill="rgba(255,255,255,0.84)" />
+      <circle cx="64" cy="30" r="18" fill="rgba(255,255,255,0.92)" />
+      <path
+        d="M18 94c4-16 18-26 34-26s30 10 34 26"
+        fill="rgba(255,255,255,0.82)"
+      />
+      <path
+        d="M54 94c3-14 14-22 28-22 13 0 24 8 27 22"
+        fill="rgba(255,255,255,0.74)"
+      />
+      <path
+        d="M10 96c6-22 24-34 46-34s40 12 46 34"
+        stroke={accent}
+        strokeWidth="8"
+        strokeLinecap="round"
+      />
+      <path
+        d="M48 28c5-9 11-13 16-13 7 0 13 5 18 15"
+        stroke="rgba(255,179,138,0.9)"
+        strokeWidth="8"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}

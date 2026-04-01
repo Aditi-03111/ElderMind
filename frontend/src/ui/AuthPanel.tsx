@@ -3,6 +3,7 @@ import { signIn, signUp, type AppSession, type SessionRole } from '../lib/api'
 import { saveStoredSession } from '../lib/session'
 import { Card } from './Card'
 import { PressableButton } from './Pressable'
+import { BellSticker, ElderSticker, FamilySticker, SparkleSticker } from './stickers'
 
 type AuthMode = 'login' | 'signup'
 
@@ -42,24 +43,52 @@ export function AuthPanel({
   const [relation, setRelation] = useState('Son / Daughter')
 
   const submit = async () => {
+    const trimmedName = name.trim()
+    const trimmedIdentifier = identifier.trim()
+    const trimmedPhone = phone.trim()
+    const trimmedRelation = relation.trim()
+
+    if (!trimmedIdentifier || !password.trim()) {
+      setError('Email or parent user ID, plus password, are required')
+      return
+    }
+    if (mode === 'signup') {
+      if (!trimmedName) {
+        setError('Family manager name is required')
+        return
+      }
+      if (!trimmedIdentifier.includes('@')) {
+        setError('Enter a valid email for the family manager login')
+        return
+      }
+    }
+
     try {
       setBusy(true)
       setError('')
       const result =
         mode === 'login'
-          ? await signIn({ identifier, password })
+          ? await signIn({ identifier: trimmedIdentifier, password })
           : await signUp(
               {
                 role: preferredRole,
-                name,
-                email: identifier,
+                name: trimmedName,
+                email: trimmedIdentifier,
                 password,
-                phone,
-                relation,
+                phone: trimmedPhone,
+                relation: trimmedRelation,
               },
             )
       await requestAssistantPermissions()
       saveStoredSession(result.session)
+      if (
+        result.session.role === 'support' &&
+        typeof window !== 'undefined' &&
+        window.location.pathname.toLowerCase() !== '/support.html'
+      ) {
+        window.location.href = '/support.html'
+        return
+      }
       onReady?.(result.session)
     } catch (e: unknown) {
       setError((e as { message?: string } | undefined)?.message || 'Could not continue')
@@ -71,14 +100,37 @@ export function AuthPanel({
   return (
     <Card>
       <div className="rounded-3xl bg-[linear-gradient(135deg,rgba(255,255,255,0.92),rgba(232,244,238,0.95))] p-4 shadow-soft ring-1 ring-black/5">
-        <p className="text-xs font-black uppercase tracking-[0.24em] text-ink/45">Bhumi Setup</p>
-        <p className="mt-2 text-xl font-extrabold tracking-tight text-ink">Login or create your account</p>
-        <p className="mt-2 text-sm text-ink/60">
-          Child or family manager signs up first, then creates parent logins inside the Family Hub.
-        </p>
-        <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.24em] text-ink/45">Bhumi Setup</p>
+            <p className="mt-2 text-xl font-extrabold tracking-tight text-ink">Login or create your account</p>
+            <p className="mt-2 max-w-xl text-sm text-ink/60">
+              Child or family manager signs up first, then creates parent logins inside the Family Hub.
+            </p>
+          </div>
+          <div className="flex items-end gap-2 self-start sm:self-auto">
+            <div className="rounded-2xl bg-white/65 p-2 shadow-soft ring-1 ring-black/5">
+              <FamilySticker className="h-14 w-14" tone="sky" />
+            </div>
+            <div className="rounded-2xl bg-white/65 p-2 shadow-soft ring-1 ring-black/5">
+              <ElderSticker className="h-14 w-14" tone="mint" />
+            </div>
+            <div className="flex flex-col gap-2">
+              <div className="rounded-2xl bg-white/65 p-2 shadow-soft ring-1 ring-black/5">
+                <BellSticker className="h-10 w-10" />
+              </div>
+              <div className="rounded-2xl bg-white/65 p-2 shadow-soft ring-1 ring-black/5">
+                <SparkleSticker className="h-10 w-10" />
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="mt-3 grid grid-cols-1 gap-2 text-center sm:grid-cols-3">
           {['Create family login', 'Add parents with user IDs', 'Turn medicines into reminders'].map((step) => (
-            <div key={step} className="rounded-2xl bg-white/75 px-3 py-2 text-xs font-semibold text-ink/65 shadow-soft ring-1 ring-black/5">
+            <div
+              key={step}
+              className="rounded-2xl bg-white/75 px-3 py-2 text-xs font-semibold text-ink/65 shadow-soft ring-1 ring-black/5"
+            >
               {step}
             </div>
           ))}

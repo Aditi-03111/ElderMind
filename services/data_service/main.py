@@ -305,6 +305,54 @@ def _managed_users(account_id: str) -> list[dict[str, Any]]:
     return users
 
 
+def _sync_family_manager_profile(old_account: dict[str, Any], new_account: dict[str, Any]) -> None:
+    managed_ids = [str(item).strip() for item in new_account.get("managed_user_ids") or [] if str(item).strip()]
+    old_email = str(old_account.get("email") or "").strip().lower()
+    new_email = str(new_account.get("email") or "").strip().lower()
+    old_name = str(old_account.get("name") or "").strip()
+    new_name = str(new_account.get("name") or "").strip()
+    old_phone = str(old_account.get("phone") or "").strip()
+    new_phone = str(new_account.get("phone") or "").strip()
+    new_relation = str(new_account.get("relation") or "Son / Daughter").strip() or "Son / Daughter"
+
+    for user_id in managed_ids:
+        user = store.get_user(user_id)
+        contacts = list(user.get("family_contacts") or [])
+        changed = False
+        for item in contacts:
+            if not isinstance(item, dict):
+                continue
+            item_email = str(item.get("email") or "").strip().lower()
+            item_phone = str(item.get("phone") or "").strip()
+            item_name = str(item.get("name") or "").strip()
+            matches = False
+            if old_email and item_email == old_email:
+                matches = True
+            elif old_phone and item_phone == old_phone and item_name == old_name:
+                matches = True
+            elif old_name and item_name == old_name and str(item.get("role") or item.get("relation") or "").strip().lower() in {"support", "son", "daughter", "family"}:
+                matches = True
+            if not matches:
+                continue
+            item["id"] = item.get("id") or _slugify(new_email or new_name, "support")
+            item["name"] = new_name or item_name or "Family manager"
+            item["phone"] = new_phone
+            item["email"] = new_email
+            item["relation"] = new_relation
+            item["role"] = "support"
+            changed = True
+
+        if not changed:
+            continue
+
+        patch: dict[str, Any] = {"family_contacts": contacts}
+        if str(user.get("caretaker_name") or "") == old_name:
+            patch["caretaker_name"] = new_name
+        if str(user.get("caretaker_phone") or "") == old_phone:
+            patch["caretaker_phone"] = new_phone
+        store.upsert_user(user_id, patch)
+
+
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "data"}
@@ -471,6 +519,44 @@ async def support_workspace(account_id: str, active_user_id: str | None = None):
     return {"status": "success", "account": account, "managed_users": managed, "active": active}
 
 
+@app.put("/support/account/{account_id}")
+async def update_support_account(account_id: str, payload: dict[str, Any]):
+    getter = getattr(store, "get_account", None)
+    updater = getattr(store, "update_account", None)
+    if not callable(getter) or not callable(updater):
+        raise HTTPException(status_code=501, detail="Support workspace is not available")
+    account = getter(account_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="Support account not found")
+
+    next_name = str(payload.get("name") or account.get("name") or "").strip()
+    next_email = str(payload.get("email") or account.get("email") or "").strip().lower()
+    next_phone = str(payload.get("phone") or account.get("phone") or "").strip()
+    next_relation = str(payload.get("relation") or account.get("relation") or "Son / Daughter").strip() or "Son / Daughter"
+
+    if not next_name or not next_email:
+        raise HTTPException(status_code=400, detail="Family manager name and email are required")
+
+    existing = store.find_account_by_email(next_email)
+    if existing and str(existing.get("account_id") or "") != account_id:
+        raise HTTPException(status_code=409, detail="That email is already used by another login")
+
+    updated = updater(
+        account_id,
+        {
+            "name": next_name,
+            "email": next_email,
+            "phone": next_phone,
+            "relation": next_relation,
+        },
+    )
+    if not updated:
+        raise HTTPException(status_code=500, detail="Could not update family manager profile")
+
+    _sync_family_manager_profile(account, updated)
+    return {"status": "success", "account": updated}
+
+
 @app.post("/support/account/{account_id}/elders")
 async def support_add_elder(account_id: str, payload: dict[str, Any]):
     getter = getattr(store, "get_account", None)
@@ -507,7 +593,7 @@ async def support_add_elder(account_id: str, payload: dict[str, Any]):
     manager_contact = {
         "id": _slugify(manager_email or manager_name, "support"),
         "name": manager_name,
-        "relation": "Son",
+        "relation": str(account.get("relation") or "Son / Daughter"),
         "role": "support",
         "phone": manager_phone,
         "email": manager_email,

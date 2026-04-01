@@ -10,5 +10,41 @@
     "phone": "+91-9449398356",
     "managed_user_ids": [],
     "created_at": "2026-04-01T17:19:17.492339+00:00"
+  },
+  "9b49c5f5-6274-40ca-8c5a-36ac26f70616": {
+    "account_id": "9b49c5f5-6274-40ca-8c5a-36ac26f70616",
+    "email": "family-faa448eb@example.com",
+    "password_hash": "8776f108e247ab1e2b323042c049c266407c81fbad41bde1e8dfc1bb66fd267e",
+    "role": "support",
+    "user_id": "",
+    "name": "Test Family Manager",
+    "relation": "Son",
+    "phone": "9999999999",
+    "managed_user_ids": [],
+    "created_at": "2026-04-01T18:33:56.236057+00:00"
+  },
+  "79579996-30dc-41a3-a801-c1dff3283438": {
+    "account_id": "79579996-30dc-41a3-a801-c1dff3283438",
+    "email": "family-01a51f1e@example.com",
+    "password_hash": "8776f108e247ab1e2b323042c049c266407c81fbad41bde1e8dfc1bb66fd267e",
+    "role": "support",
+    "user_id": "",
+    "name": "Test Family Manager",
+    "relation": "Son",
+    "phone": "9999999999",
+    "managed_user_ids": [],
+    "created_at": "2026-04-01T18:34:43.773147+00:00"
+  },
+  "e39c033f-4910-4ce3-8455-48c583ba52bf": {
+    "account_id": "e39c033f-4910-4ce3-8455-48c583ba52bf",
+    "email": "family-3a1a5013@example.com",
+    "password_hash": "8776f108e247ab1e2b323042c049c266407c81fbad41bde1e8dfc1bb66fd267e",
+    "role": "support",
+    "user_id": "",
+    "name": "Fresh Family Manager Updated",
+    "relation": "Son / Daughter",
+    "phone": "8888888888",
+    "managed_user_ids": [],
+    "created_at": "2026-04-01T18:36:46.457400+00:00"
   }
 }

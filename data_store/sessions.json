@@ -25,5 +25,32 @@
     "display_name": "Bhumi Family",
     "email": "bhumi.family9449@eldermind.app",
     "created_at": "2026-04-01T17:50:26.469137+00:00"
+  },
+  "0c9678c0-b949-42e3-961a-756e177d4b58": {
+    "session_id": "0c9678c0-b949-42e3-961a-756e177d4b58",
+    "role": "support",
+    "user_id": "",
+    "caregiver_id": "9b49c5f5-6274-40ca-8c5a-36ac26f70616",
+    "display_name": "Test Family Manager",
+    "email": "family-faa448eb@example.com",
+    "created_at": "2026-04-01T18:33:56.238349+00:00"
+  },
+  "42fb4940-532d-4de0-9dc7-086e34031861": {
+    "session_id": "42fb4940-532d-4de0-9dc7-086e34031861",
+    "role": "support",
+    "user_id": "",
+    "caregiver_id": "79579996-30dc-41a3-a801-c1dff3283438",
+    "display_name": "Test Family Manager",
+    "email": "family-01a51f1e@example.com",
+    "created_at": "2026-04-01T18:34:43.775734+00:00"
+  },
+  "9f7b242e-dc49-4302-a4f9-e93c94a605f7": {
+    "session_id": "9f7b242e-dc49-4302-a4f9-e93c94a605f7",
+    "role": "support",
+    "user_id": "",
+    "caregiver_id": "e39c033f-4910-4ce3-8455-48c583ba52bf",
+    "display_name": "Fresh Family Manager",
+    "email": "family-3a1a5013@example.com",
+    "created_at": "2026-04-01T18:36:46.459255+00:00"
   }
 }

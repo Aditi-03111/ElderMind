@@ -21,6 +21,7 @@ import {
   syncMedicineReminders,
   testWhatsApp,
   updateCaretakerLogin,
+  updateSupportAccount,
   updateUserProfile,
   type AlarmItem,
   type AppSession,
@@ -30,6 +31,7 @@ import {
 import { runAssistantPlugin } from '../lib/assistantPlugins'
 import { regionalLanguages } from '../lib/regionalLanguages'
 import { getStoredSession } from '../lib/session'
+import { BellSticker, ElderSticker, FamilySticker, HeartPulseSticker, PillSticker, SparkleSticker } from '../ui/stickers'
 import Tesseract from 'tesseract.js'
 
 type ParentForm = {
@@ -61,6 +63,13 @@ type ReportReviewState = {
   medicines: MedicineItem[]
 }
 
+type ManagerForm = {
+  name: string
+  email: string
+  phone: string
+  relation: string
+}
+
 function emptyParentForm(): ParentForm {
   return {
     name: '',
@@ -85,6 +94,15 @@ function emptyCaretakerForm(): CaretakerForm {
     password: '',
     phone: '',
     relation: 'Caretaker',
+  }
+}
+
+function emptyManagerForm(): ManagerForm {
+  return {
+    name: '',
+    email: '',
+    phone: '',
+    relation: 'Son / Daughter',
   }
 }
 
@@ -124,6 +142,7 @@ export function CaregiverPage() {
   const [parentLoginNotice, setParentLoginNotice] = useState('')
   const [parentForm, setParentForm] = useState<ParentForm>(() => emptyParentForm())
   const [caretakerForm, setCaretakerForm] = useState<CaretakerForm>(() => emptyCaretakerForm())
+  const [managerForm, setManagerForm] = useState<ManagerForm>(() => emptyManagerForm())
   const [reminderTitle, setReminderTitle] = useState('Medicine reminder')
   const [reminderTime, setReminderTime] = useState('')
   const [commandText, setCommandText] = useState('')
@@ -136,6 +155,7 @@ export function CaregiverPage() {
   const [savingMedicine, setSavingMedicine] = useState(false)
   const [savingParent, setSavingParent] = useState(false)
   const [savingCaretaker, setSavingCaretaker] = useState(false)
+  const [savingManager, setSavingManager] = useState(false)
   const [commandBusy, setCommandBusy] = useState(false)
   const [parentPasswordBusy, setParentPasswordBusy] = useState(false)
   const [supportActionBusy, setSupportActionBusy] = useState('')
@@ -202,6 +222,16 @@ export function CaregiverPage() {
     setParentPasswordDraft('')
   }, [active?.user?.user_id, active?.medicines])
 
+  useEffect(() => {
+    if (!workspace?.account) return
+    setManagerForm({
+      name: workspace.account.name || '',
+      email: workspace.account.email || '',
+      phone: workspace.account.phone || '',
+      relation: workspace.account.relation || 'Son / Daughter',
+    })
+  }, [workspace?.account?.account_id, workspace?.account?.name, workspace?.account?.email, workspace?.account?.phone, workspace?.account?.relation])
+
   const upcomingAlarms = useMemo(
     () => (active?.alarms || []).filter((item) => new Date(item.time_iso).getTime() >= Date.now()),
     [active?.alarms],
@@ -264,6 +294,27 @@ export function CaregiverPage() {
       setError((e as { message?: string } | undefined)?.message || 'Could not add parent profile')
     } finally {
       setSavingParent(false)
+    }
+  }
+
+  const saveManagerProfile = async () => {
+    if (!accountId) return
+    try {
+      setSavingManager(true)
+      setError('')
+      setMessage('')
+      await updateSupportAccount(accountId, {
+        name: managerForm.name.trim(),
+        email: managerForm.email.trim(),
+        phone: managerForm.phone.trim(),
+        relation: managerForm.relation.trim(),
+      })
+      setMessage('Family manager profile saved.')
+      await load(activeUserId)
+    } catch (e: unknown) {
+      setError((e as { message?: string } | undefined)?.message || 'Could not save family manager profile')
+    } finally {
+      setSavingManager(false)
     }
   }
 
@@ -601,9 +652,14 @@ export function CaregiverPage() {
     <AppShell title="Family Hub" subtitle="Manage parents, medicines, reminders, caretakers, and reports from one clean dashboard.">
       <Card>
         <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-lg font-extrabold tracking-tight text-ink">Manager account</p>
-            <p className="mt-1 text-sm text-ink/60">{workspace?.account?.email || session.email || 'Signed in'}</p>
+          <div className="flex items-center gap-3">
+            <div className="rounded-2xl bg-sky/15 p-2 ring-1 ring-black/5">
+              <FamilySticker className="h-12 w-12" tone="sky" />
+            </div>
+            <div>
+              <p className="text-lg font-extrabold tracking-tight text-ink">Manager account</p>
+              <p className="mt-1 text-sm text-ink/60">{workspace?.account?.email || session.email || 'Signed in'}</p>
+            </div>
           </div>
           <PressableButton variant="soft" size="md" onClick={() => void load()}>
             Refresh
@@ -619,8 +675,49 @@ export function CaregiverPage() {
       </Card>
 
       <Card>
-        <p className="text-lg font-extrabold tracking-tight text-ink">Parents you manage</p>
-        <p className="mt-1 text-sm text-ink/60">Select a registered parent first, then manage their medicines, reports, caretakers, and reminders below.</p>
+        <div className="flex items-center gap-3">
+          <div className="rounded-2xl bg-mint/15 p-2 ring-1 ring-black/5">
+            <SparkleSticker className="h-10 w-10" />
+          </div>
+          <div>
+            <p className="text-lg font-extrabold tracking-tight text-ink">Family manager profile</p>
+            <p className="mt-1 text-sm text-ink/60">This is your own profile. It is separate from the parent profiles you create below.</p>
+          </div>
+        </div>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          {[
+            ['Your name', 'name'],
+            ['Email', 'email'],
+            ['Phone', 'phone'],
+            ['Relation', 'relation'],
+          ].map(([label, key]) => (
+            <label key={key} className="block text-sm font-semibold text-ink/70">
+              <span>{label}</span>
+              <input
+                value={managerForm[key as keyof ManagerForm]}
+                onChange={(e) => setManagerForm((current) => ({ ...current, [key]: e.target.value }))}
+                className="mt-1 w-full rounded-xl2 border-0 bg-white/75 px-3 py-3 text-base shadow-soft ring-1 ring-black/5"
+              />
+            </label>
+          ))}
+        </div>
+        <div className="mt-3">
+          <PressableButton variant="primary" size="lg" onClick={() => void saveManagerProfile()} disabled={savingManager}>
+            {savingManager ? 'Saving...' : 'Save family manager profile'}
+          </PressableButton>
+        </div>
+      </Card>
+
+      <Card>
+        <div className="flex items-center gap-3">
+          <div className="rounded-2xl bg-peach/20 p-2 ring-1 ring-black/5">
+            <ElderSticker className="h-11 w-11" tone="peach" />
+          </div>
+          <div>
+            <p className="text-lg font-extrabold tracking-tight text-ink">Parents you manage</p>
+            <p className="mt-1 text-sm text-ink/60">Select a registered parent first, then manage their medicines, reports, caretakers, and reminders below.</p>
+          </div>
+        </div>
         <div className="mt-3 grid gap-2">
           {(workspace?.managed_users || []).map((user) => {
             const selected = user.user_id === activeUserId
@@ -810,10 +907,15 @@ export function CaregiverPage() {
 
           <Card>
             <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-lg font-extrabold tracking-tight text-ink">Medicine plan</p>
-                <p className="mt-1 text-sm text-ink/60">Saving for {active.user.name}.</p>
-                <p className="mt-1 text-sm text-ink/60">Bhumi reads these reminders and the parent can confirm from the app.</p>
+              <div className="flex items-center gap-3">
+                <div className="rounded-2xl bg-sky/15 p-2 ring-1 ring-black/5">
+                  <PillSticker className="h-11 w-11" />
+                </div>
+                <div>
+                  <p className="text-lg font-extrabold tracking-tight text-ink">Medicine plan</p>
+                  <p className="mt-1 text-sm text-ink/60">Saving for {active.user.name}.</p>
+                  <p className="mt-1 text-sm text-ink/60">Bhumi reads these reminders and the parent can confirm from the app.</p>
+                </div>
               </div>
               <PressableButton variant="soft" size="md" onClick={() => setMedicines((current) => [...current, blankMedicine()])}>
                 Add row
@@ -882,8 +984,15 @@ export function CaregiverPage() {
 
           {pendingReportReview ? (
             <Card>
-              <p className="text-lg font-extrabold tracking-tight text-ink">Imported medicines review</p>
-              <p className="mt-1 text-sm text-ink/60">Review suggestions from {pendingReportReview.reportName} before they are added to the live medicine plan.</p>
+              <div className="flex items-center gap-3">
+                <div className="rounded-2xl bg-peach/20 p-2 ring-1 ring-black/5">
+                  <PillSticker className="h-10 w-10" />
+                </div>
+                <div>
+                  <p className="text-lg font-extrabold tracking-tight text-ink">Imported medicines review</p>
+                  <p className="mt-1 text-sm text-ink/60">Review suggestions from {pendingReportReview.reportName} before they are added to the live medicine plan.</p>
+                </div>
+              </div>
               <div className="mt-3 space-y-3">
                 {pendingReportReview.medicines.map((item, index) => (
                   <div key={item.id || index} className="rounded-2xl bg-white/75 p-3 shadow-soft ring-1 ring-black/5">
@@ -1003,8 +1112,15 @@ export function CaregiverPage() {
           </Card>
 
           <Card>
-            <p className="text-lg font-extrabold tracking-tight text-ink">Reminders and urgent contact</p>
-            <p className="mt-1 text-sm text-ink/60">These reminders and urgent actions will go to {active.user.name} and their linked support chain.</p>
+            <div className="flex items-center gap-3">
+              <div className="rounded-2xl bg-peach/20 p-2 ring-1 ring-black/5">
+                <BellSticker className="h-10 w-10" />
+              </div>
+              <div>
+                <p className="text-lg font-extrabold tracking-tight text-ink">Reminders and urgent contact</p>
+                <p className="mt-1 text-sm text-ink/60">These reminders and urgent actions will go to {active.user.name} and their linked support chain.</p>
+              </div>
+            </div>
             <div className="mt-3 grid gap-2 sm:grid-cols-[1fr,160px,auto]">
               <input
                 value={reminderTitle}
@@ -1042,11 +1158,18 @@ export function CaregiverPage() {
           </Card>
 
           <Card>
-            <p className="text-lg font-extrabold tracking-tight text-ink">Scan medical report</p>
-            <p className="mt-1 text-sm text-ink/60">Importing for {active.user.name}.</p>
-            <p className="mt-1 text-sm text-ink/60">
-              Add a photo from the camera or gallery. Bhumi extracts the report text, stores the image, and prepares a simple summary.
-            </p>
+            <div className="flex items-center gap-3">
+              <div className="rounded-2xl bg-sky/15 p-2 ring-1 ring-black/5">
+                <HeartPulseSticker className="h-10 w-10" />
+              </div>
+              <div>
+                <p className="text-lg font-extrabold tracking-tight text-ink">Scan medical report</p>
+                <p className="mt-1 text-sm text-ink/60">Importing for {active.user.name}.</p>
+                <p className="mt-1 text-sm text-ink/60">
+                  Add a photo from the camera or gallery. Bhumi extracts the report text, stores the image, and prepares a simple summary.
+                </p>
+              </div>
+            </div>
             <label className="mt-3 flex cursor-pointer items-center justify-center rounded-2xl border border-dashed border-ink/15 bg-white/70 px-4 py-6 text-sm font-semibold text-ink/70 shadow-soft">
               <input
                 type="file"
@@ -1093,8 +1216,15 @@ export function CaregiverPage() {
           </Card>
 
           <Card>
-            <p className="text-lg font-extrabold tracking-tight text-ink">Live support circle</p>
-            <p className="mt-1 text-sm text-ink/60">Edit linked support people, change their phone/email, or remove them from this parent.</p>
+            <div className="flex items-center gap-3">
+              <div className="rounded-2xl bg-mint/15 p-2 ring-1 ring-black/5">
+                <FamilySticker className="h-10 w-10" tone="mint" />
+              </div>
+              <div>
+                <p className="text-lg font-extrabold tracking-tight text-ink">Live support circle</p>
+                <p className="mt-1 text-sm text-ink/60">Edit linked support people, change their phone/email, or remove them from this parent.</p>
+              </div>
+            </div>
             <div className="mt-3 space-y-3">
               {(active.support_contacts || []).map((item, index) => (
                 <div key={`${item.id || item.phone}-${index}`} className="rounded-2xl bg-white/70 p-3 shadow-soft ring-1 ring-black/5">
@@ -1174,7 +1304,12 @@ export function CaregiverPage() {
           </Card>
 
           <Card>
-            <p className="text-lg font-extrabold tracking-tight text-ink">Family activity</p>
+            <div className="flex items-center gap-3">
+              <div className="rounded-2xl bg-peach/20 p-2 ring-1 ring-black/5">
+                <SparkleSticker className="h-10 w-10" />
+              </div>
+              <p className="text-lg font-extrabold tracking-tight text-ink">Family activity</p>
+            </div>
             <div className="mt-3 space-y-2">
               {recentAudit.map((item) => (
                 <div key={item.id} className="rounded-2xl bg-white/70 p-3 shadow-soft ring-1 ring-black/5">

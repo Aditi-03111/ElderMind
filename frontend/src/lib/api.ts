@@ -563,6 +563,18 @@ export async function getSupportWorkspace(account_id: string, active_user_id = '
   }
 }
 
+export async function updateSupportAccount(
+  account_id: string,
+  payload: { name: string; email: string; phone?: string; relation?: string },
+) {
+  const res = await fetch(`${API_BASE}/support/account/${encodeURIComponent(account_id)}`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  return asJson<{ status: string; account: SupportAccount }>(res)
+}
+
 export async function createManagedElder(
   account_id: string,
   payload: {

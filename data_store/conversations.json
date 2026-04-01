@@ -925,6 +925,25 @@
         "festival": "",
         "tithi": ""
       }
+    },
+    {
+      "id": "950e7a61-f484-4452-913e-5e01882d1290",
+      "ts": "2026-04-01T18:24:25.210826+00:00",
+      "text_input": "Paani to pee liya?",
+      "ai_response": "Ramesh ji, main sun raha hoon. Aap aaraam se boliye.",
+      "mood": "okay",
+      "emotion": "neutral",
+      "health_logs": [],
+      "mood_logs": [
+        "okay"
+      ],
+      "alerts": [],
+      "source": "voice",
+      "context": {
+        "weather": "unknown",
+        "festival": "",
+        "tithi": ""
+      }
     }
   ],
   "lang-smoke": [
