@@ -7,7 +7,7 @@ import { MicButton } from '../ui/MicButton'
 import { PressableButton } from '../ui/Pressable'
 import { ElderSticker, SparkleSticker } from '../ui/stickers'
 import { includesWakeWord, parseAlarmTime, runAssistantPlugin, stripWakeWords } from '../lib/assistantPlugins'
-import { createAlarm, deleteAlarm, getAlarms, getConversationHistory, getUserProfile, postVoice, postVoiceAudio, sendSos, callContact, updateActivityStatus, type AlarmItem, type AppSession, type ConversationItem, type UserProfile } from '../lib/api'
+import { addConversationHistory, createAlarm, deleteAlarm, getAlarms, getConversationHistory, getUserProfile, postVoice, postVoiceAudio, sendSos, callContact, updateActivityStatus, type AlarmItem, type AppSession, type ConversationItem, type UserProfile } from '../lib/api'
 import { notify, playAlarmTone } from '../lib/notifications'
 import { listenOnce, playAudioUrl, speak, stopSpeaking } from '../lib/speech'
 import { clearStoredSession, getStoredSession } from '../lib/session'
@@ -20,6 +20,7 @@ function browserLang(profile: UserProfile | null) {
   if (language.includes('tamil')) return 'ta-IN'
   if (language.includes('telugu')) return 'te-IN'
   if (language.includes('gujarati')) return 'gu-IN'
+  if (language.includes('marathi')) return 'mr-IN'
   return 'en-IN'
 }
 
@@ -54,6 +55,7 @@ export function HomePage() {
   const [wakeBusy, setWakeBusy] = useState(false)
   const [lastUser, setLastUser] = useState('')
   const [lastBot, setLastBot] = useState('')
+  const [lastEmotion, setLastEmotion] = useState('')
   const [input, setInput] = useState('')
   const [error, setError] = useState('')
   const [alarms, setAlarms] = useState<AlarmItem[]>([])
@@ -233,6 +235,19 @@ export function HomePage() {
     if (text) setLastBot(text)
   }
 
+  const saveLocalHistory = async (userText: string, botText: string) => {
+    if (!session) return
+    await addConversationHistory(session.user_id, {
+      ts: new Date().toISOString(),
+      text_input: userText,
+      ai_response: botText,
+      mood: 'okay',
+      emotion: lastEmotion || 'supportive',
+      source: 'local_action',
+    })
+    await afterReply(botText)
+  }
+
   const sendAssistantMessage = async (message: string, audioBlob?: Blob, options?: { skipPlugin?: boolean }) => {
     if (!session) return
     const commandText = message.trim()
@@ -266,12 +281,13 @@ export function HomePage() {
       if (plugin.type === 'assistant_prompt') {
         if (/alarm|अलार्म|remind/i.test(commandText)) {
           setPendingAlarmPrompt(commandText)
-          const followUpText = localActionText(commandText, 'Sure. What time should I set it for?', 'Theek hai. Kitne baje lagaun?')
-          speak(followUpText, { lang: browserLang(profile) })
-          setLastUser(commandText)
-          setLastBot(followUpText)
-          return
-        }
+        const followUpText = localActionText(commandText, 'Sure. What time should I set it for?', 'Theek hai. Kitne baje lagaun?')
+        speak(followUpText, { lang: browserLang(profile) })
+        setLastUser(commandText)
+        setLastBot(followUpText)
+        await saveLocalHistory(commandText, followUpText)
+        return
+      }
         if (plugin.spokenText) speak(localActionText(commandText, plugin.spokenText, 'Abhi sunata hoon.'), { lang: browserLang(profile) })
         await sendAssistantMessage(plugin.prompt, undefined, { skipPlugin: true })
         return
@@ -287,13 +303,14 @@ export function HomePage() {
         speak(messageText, { lang: browserLang(profile) })
         setLastUser(commandText)
         setLastBot(messageText)
+        await saveLocalHistory(commandText, messageText)
         return
       }
       if (plugin.type === 'activity') {
         await updateActivityStatus(session.user_id, plugin.payload)
         setLastUser(commandText)
         setLastBot(plugin.spokenText || 'Status updated.')
-        await afterReply(plugin.spokenText || 'Status updated.')
+        await saveLocalHistory(commandText, plugin.spokenText || 'Status updated.')
         return
       }
       if (plugin.type === 'call') {
@@ -301,7 +318,9 @@ export function HomePage() {
         const res = await callContact({ user_id: session.user_id })
         if (res.mode === 'fallback') window.location.href = `tel:${res.target}`
         setLastUser(commandText)
-        setLastBot(localActionText(commandText, `Calling ${res.label}.`, `${res.label} ko call kar raha hoon.`))
+        const replyText = localActionText(commandText, `Calling ${res.label}.`, `${res.label} ko call kar raha hoon.`)
+        setLastBot(replyText)
+        await saveLocalHistory(commandText, replyText)
         return
       }
       if (plugin.type === 'sos') {
@@ -316,7 +335,9 @@ export function HomePage() {
         const callRes = await callContact({ user_id: session.user_id })
         if (callRes.mode === 'fallback') window.location.href = `tel:${callRes.target}`
         setLastUser(commandText)
-        setLastBot(`${res.message} ${localActionText(commandText, `Calling ${callRes.label} too.`, `${callRes.label} ko call bhi kar raha hoon.`)}`)
+        const replyText = `${res.message} ${localActionText(commandText, `Calling ${callRes.label} too.`, `${callRes.label} ko call bhi kar raha hoon.`)}`
+        setLastBot(replyText)
+        await saveLocalHistory(commandText, replyText)
         return
       }
       if (plugin.type === 'alarm') {
@@ -329,7 +350,9 @@ export function HomePage() {
         })
         setAlarms((current) => [...current, alarm].sort((a, b) => a.time_iso.localeCompare(b.time_iso)))
         setLastUser(commandText)
-        setLastBot(localActionText(commandText, `Alarm set for ${new Date(alarm.time_iso).toLocaleString()}.`, `Alarm ${new Date(alarm.time_iso).toLocaleString()} ke liye set ho gaya.`))
+        const replyText = localActionText(commandText, `Alarm set for ${new Date(alarm.time_iso).toLocaleString()}.`, `Alarm ${new Date(alarm.time_iso).toLocaleString()} ke liye set ho gaya.`)
+        setLastBot(replyText)
+        await saveLocalHistory(commandText, replyText)
         return
       }
     }
@@ -342,6 +365,7 @@ export function HomePage() {
         ? await postVoiceAudio({ user_id: session.user_id, audio: audioBlob, text: commandText || undefined, lat: geo?.lat, lon: geo?.lon })
         : await postVoice({ user_id: session.user_id, text: commandText, lat: geo?.lat, lon: geo?.lon })
       setLastBot(res.text)
+      setLastEmotion(`${res.mood}${res.emotion ? ` | ${res.emotion}` : ''}`)
       if (res.audio_url) await playAudioUrl(res.audio_url)
       else speak(res.text, { lang: responseSpeechLang(res, profile) })
       await afterReply(res.text)
@@ -532,6 +556,7 @@ export function HomePage() {
                     <span className="font-extrabold">Bhumi:</span> {lastBot}
                   </p>
                 ) : null}
+                {lastEmotion ? <p className="mt-2 text-sm text-ink/60">Detected mood and emotion: {lastEmotion}</p> : null}
               </>
             )}
           </div>

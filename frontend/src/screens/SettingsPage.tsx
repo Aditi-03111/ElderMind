@@ -40,8 +40,32 @@ export function SettingsPage() {
   const [alarms, setAlarms] = useState<AlarmItem[]>([])
   const [alarmTitle, setAlarmTitle] = useState('Alarm')
   const [alarmTime, setAlarmTime] = useState('')
+  const [permissionState, setPermissionState] = useState({
+    microphone: 'unknown',
+    notifications: typeof Notification !== 'undefined' ? Notification.permission : 'unsupported',
+    location: 'unknown',
+  })
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+
+  const refreshPermissions = async () => {
+    const next = {
+      microphone: 'unknown',
+      notifications: typeof Notification !== 'undefined' ? Notification.permission : 'unsupported',
+      location: 'unknown',
+    }
+    try {
+      if (navigator.permissions?.query) {
+        const mic = await navigator.permissions.query({ name: 'microphone' as PermissionName })
+        next.microphone = mic.state
+        const geo = await navigator.permissions.query({ name: 'geolocation' as PermissionName })
+        next.location = geo.state
+      }
+    } catch {
+      // ignore unsupported permissions api
+    }
+    setPermissionState(next)
+  }
 
   const load = async () => {
     if (!session) return
@@ -54,6 +78,7 @@ export function SettingsPage() {
   useEffect(() => {
     if (!session) return
     void load().catch((e: unknown) => setError((e as { message?: string } | undefined)?.message || 'Could not load settings'))
+    void refreshPermissions()
   }, [session])
 
   const historyGroups = useMemo(() => {
@@ -112,6 +137,34 @@ export function SettingsPage() {
       setError('Could not fetch current location')
     } finally {
       setLocationBusy(false)
+      void refreshPermissions()
+    }
+  }
+
+  const requestMicrophone = async () => {
+    try {
+      setError('')
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      stream.getTracks().forEach((track) => track.stop())
+      setMessage('Microphone access granted.')
+    } catch {
+      setError('Could not get microphone permission')
+    } finally {
+      void refreshPermissions()
+    }
+  }
+
+  const requestNotifications = async () => {
+    try {
+      setError('')
+      if ('Notification' in window) {
+        await Notification.requestPermission()
+      }
+      setMessage('Notification permission updated.')
+    } catch {
+      setError('Could not update notification permission')
+    } finally {
+      void refreshPermissions()
     }
   }
 
@@ -338,6 +391,28 @@ export function SettingsPage() {
         </div>
         {message ? <p className="mt-2 text-sm font-semibold text-ink/70">{message}</p> : null}
         {error ? <p className="mt-2 text-sm font-semibold text-danger">{error}</p> : null}
+      </Card>
+
+      <Card>
+        <p className="text-lg font-extrabold tracking-tight text-ink">Permissions center</p>
+        <p className="mt-1 text-sm text-ink/60">Check and request the browser permissions Bhumi needs for voice, notifications, and location.</p>
+        <div className="mt-3 space-y-2">
+          {([
+            { label: 'Microphone', state: permissionState.microphone, handler: requestMicrophone },
+            { label: 'Notifications', state: permissionState.notifications, handler: requestNotifications },
+            { label: 'Location', state: permissionState.location, handler: fetchCurrentLocation },
+          ] as const).map((item) => (
+            <div key={item.label} className="flex items-center justify-between gap-3 rounded-2xl bg-white/70 px-3 py-3 shadow-soft ring-1 ring-black/5">
+              <div>
+                <p className="text-sm font-extrabold text-ink">{item.label}</p>
+                <p className="mt-1 text-sm text-ink/60">Status: {item.state}</p>
+              </div>
+              <PressableButton variant="soft" size="md" onClick={() => void item.handler()}>
+                Request
+              </PressableButton>
+            </div>
+          ))}
+        </div>
       </Card>
 
       <Card>

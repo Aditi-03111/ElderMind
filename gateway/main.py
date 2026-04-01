@@ -199,6 +199,21 @@ async def support_add_caretaker(account_id: str, payload: dict[str, Any]):
     return await _proxy_json("POST", f"{settings.data_service_url}/support/account/{account_id}/caretakers", json=payload)
 
 
+@app.post("/support/account/{account_id}/elders/{user_id}/reset-password")
+async def support_reset_parent_password(account_id: str, user_id: str, payload: dict[str, Any]):
+    return await _proxy_json("POST", f"{settings.data_service_url}/support/account/{account_id}/elders/{user_id}/reset-password", json=payload)
+
+
+@app.put("/support/account/{account_id}/caretakers/{contact_id}")
+async def support_update_caretaker(account_id: str, contact_id: str, payload: dict[str, Any]):
+    return await _proxy_json("PUT", f"{settings.data_service_url}/support/account/{account_id}/caretakers/{contact_id}", json=payload)
+
+
+@app.delete("/support/account/{account_id}/caretakers/{contact_id}")
+async def support_delete_caretaker(account_id: str, contact_id: str, user_id: str):
+    return await _proxy_json("DELETE", f"{settings.data_service_url}/support/account/{account_id}/caretakers/{contact_id}", params={"user_id": user_id})
+
+
 @app.post("/support/account/{account_id}/link-parent")
 async def support_link_parent(account_id: str, payload: dict[str, Any]):
     return await _proxy_json("POST", f"{settings.data_service_url}/support/account/{account_id}/link-parent", json=payload)

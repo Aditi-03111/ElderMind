@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .config import settings
-from .store import LocalStore, MongoStore, Store, _slugify
+from .store import LocalStore, MongoStore, Store, _password_hash, _slugify
 
 
 def _cors_origins() -> list[str]:
@@ -95,9 +95,12 @@ def _support_contacts(user: dict[str, Any]) -> list[dict[str, str]]:
     if primary_name or primary_phone:
         contacts.append(
             {
+                "id": "primary-support",
                 "name": primary_name or "Primary support",
                 "phone": primary_phone,
                 "role": "primary",
+                "relation": "Primary support",
+                "email": "",
             }
         )
 
@@ -106,20 +109,52 @@ def _support_contacts(user: dict[str, Any]) -> list[dict[str, str]]:
             continue
         contacts.append(
             {
+                "id": str(item.get("id") or "").strip(),
                 "name": str(item.get("name") or item.get("relation") or "Family support").strip() or "Family support",
                 "phone": str(item.get("phone") or "").strip(),
                 "role": str(item.get("role") or item.get("relation") or "family").strip() or "family",
+                "relation": str(item.get("relation") or item.get("role") or "family").strip() or "family",
+                "email": str(item.get("email") or "").strip().lower(),
             }
         )
 
     deduped: list[dict[str, str]] = []
     seen: set[str] = set()
     for item in contacts:
-        if not item.get("phone") or item["phone"] in seen:
+        dedupe_key = item.get("phone") or item.get("id") or item.get("email") or item.get("name") or ""
+        if not dedupe_key or dedupe_key in seen:
             continue
-        seen.add(item["phone"])
+        seen.add(dedupe_key)
         deduped.append(item)
     return deduped
+
+
+def _primary_support_contact(user: dict[str, Any]) -> dict[str, str]:
+    primary_name = str(user.get("caretaker_name") or user.get("caregiver_name") or "").strip()
+    primary_phone = str(user.get("caretaker_phone") or user.get("caregiver_phone") or "").strip()
+    return {
+        "id": "primary-support",
+        "name": primary_name or "Primary support",
+        "phone": primary_phone,
+        "role": "primary",
+    }
+
+
+def _find_support_account_for_user(user_id: str, contact: dict[str, Any]) -> dict[str, Any] | None:
+    contact_email = str(contact.get("email") or "").strip().lower()
+    contact_phone = str(contact.get("phone") or "").strip()
+    for account in store.list_accounts():
+        if str(account.get("role") or "").strip().lower() not in {"support", "caretaker", "caregiver"}:
+            continue
+        if str(account.get("user_id") or "").strip().lower() != user_id:
+            continue
+        if contact_email and str(account.get("email") or "").strip().lower() == contact_email:
+            return account
+        if contact_phone and str(account.get("phone") or "").strip() == contact_phone:
+            return account
+        if str(contact.get("id") or "").strip() and str(account.get("account_id") or "").strip() == str(contact.get("id") or "").strip():
+            return account
+    return None
 
 
 def _append_audit(
@@ -594,6 +629,133 @@ async def support_add_caretaker(account_id: str, payload: dict[str, Any]):
         meta={"caretaker_email": email, "relation": relation},
     )
     return {"status": "success", "account": created, "user": store.get_user(user_id)}
+
+
+@app.post("/support/account/{account_id}/elders/{user_id}/reset-password")
+async def support_reset_parent_password(account_id: str, user_id: str, payload: dict[str, Any]):
+    getter = getattr(store, "get_account", None)
+    updater = getattr(store, "update_account", None)
+    finder = getattr(store, "find_account_by_user_id", None)
+    if not callable(getter) or not callable(updater) or not callable(finder):
+        raise HTTPException(status_code=501, detail="Support workspace is not available")
+    account = getter(account_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="Support account not found")
+    normalized_user_id = str(user_id or "").strip().lower()
+    if normalized_user_id not in [str(item).strip().lower() for item in account.get("managed_user_ids") or []]:
+        raise HTTPException(status_code=403, detail="That parent is not managed by this family account")
+    parent_account = finder(normalized_user_id, role="elder")
+    if not parent_account:
+        raise HTTPException(status_code=404, detail="Parent login not found")
+    new_password = str(payload.get("password") or "").strip()
+    if len(new_password) < 6:
+        raise HTTPException(status_code=400, detail="New password must be at least 6 characters")
+    updated = updater(str(parent_account.get("account_id") or ""), {"password_hash": _password_hash(new_password)})
+    _append_audit(
+        normalized_user_id,
+        action="parent_password_reset",
+        summary="Parent login password was reset.",
+        actor_name=str(account.get("name") or ""),
+        actor_role="family_manager",
+        meta={"account_id": account_id},
+    )
+    return {"status": "success", "account": updated}
+
+
+@app.put("/support/account/{account_id}/caretakers/{contact_id}")
+async def support_update_caretaker(account_id: str, contact_id: str, payload: dict[str, Any]):
+    getter = getattr(store, "get_account", None)
+    updater = getattr(store, "update_account", None)
+    if not callable(getter) or not callable(updater):
+        raise HTTPException(status_code=501, detail="Support workspace is not available")
+    account = getter(account_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="Support account not found")
+    user_id = str(payload.get("user_id") or "").strip().lower()
+    if not user_id or not _user_exists(user_id):
+        raise HTTPException(status_code=404, detail="Parent profile not found")
+    user = store.get_user(user_id)
+    contacts = list(user.get("family_contacts") or [])
+    target_index = next((index for index, item in enumerate(contacts) if isinstance(item, dict) and str(item.get("id") or "").strip() == contact_id), -1)
+    if target_index < 0:
+        raise HTTPException(status_code=404, detail="Support member not found")
+    current_contact = contacts[target_index]
+    updated_contact = {
+        **current_contact,
+        "name": str(payload.get("name") or current_contact.get("name") or "").strip() or current_contact.get("name") or "Support",
+        "relation": str(payload.get("relation") or current_contact.get("relation") or "support").strip() or "support",
+        "role": str(payload.get("role") or current_contact.get("role") or current_contact.get("relation") or "support").strip() or "support",
+        "phone": str(payload.get("phone") or current_contact.get("phone") or "").strip(),
+        "email": str(payload.get("email") or current_contact.get("email") or "").strip().lower(),
+    }
+    contacts[target_index] = updated_contact
+    user_patch: dict[str, Any] = {"family_contacts": contacts}
+    if user.get("caretaker_name") == current_contact.get("name"):
+        user_patch["caretaker_name"] = updated_contact["name"]
+    if user.get("caretaker_phone") == current_contact.get("phone"):
+        user_patch["caretaker_phone"] = updated_contact["phone"]
+    updated_user = store.upsert_user(user_id, user_patch)
+    linked_account = _find_support_account_for_user(user_id, current_contact)
+    updated_account = None
+    if linked_account:
+        account_patch = {
+            "name": updated_contact["name"],
+            "relation": updated_contact["relation"],
+            "phone": updated_contact["phone"],
+            "email": updated_contact["email"] or linked_account.get("email"),
+        }
+        next_password = str(payload.get("password") or "").strip()
+        if next_password:
+            account_patch["password_hash"] = _password_hash(next_password)
+        updated_account = updater(str(linked_account.get("account_id") or ""), account_patch)
+    _append_audit(
+        user_id,
+        action="caretaker_updated",
+        summary=f"Support member {updated_contact['name']} was updated.",
+        actor_name=str(account.get("name") or ""),
+        actor_role="family_manager",
+        meta={"contact_id": contact_id},
+    )
+    return {"status": "success", "user": updated_user, "account": updated_account, "contact": updated_contact}
+
+
+@app.delete("/support/account/{account_id}/caretakers/{contact_id}")
+async def support_delete_caretaker(account_id: str, contact_id: str, user_id: str):
+    getter = getattr(store, "get_account", None)
+    deleter = getattr(store, "delete_account", None)
+    if not callable(getter) or not callable(deleter):
+        raise HTTPException(status_code=501, detail="Support workspace is not available")
+    account = getter(account_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="Support account not found")
+    normalized_user_id = str(user_id or "").strip().lower()
+    if not normalized_user_id or not _user_exists(normalized_user_id):
+        raise HTTPException(status_code=404, detail="Parent profile not found")
+    user = store.get_user(normalized_user_id)
+    contacts = list(user.get("family_contacts") or [])
+    current_contact = next((item for item in contacts if isinstance(item, dict) and str(item.get("id") or "").strip() == contact_id), None)
+    if not current_contact:
+        raise HTTPException(status_code=404, detail="Support member not found")
+    remaining_contacts = [item for item in contacts if not (isinstance(item, dict) and str(item.get("id") or "").strip() == contact_id)]
+    user_patch: dict[str, Any] = {"family_contacts": remaining_contacts}
+    if user.get("caretaker_name") == current_contact.get("name"):
+        fallback = remaining_contacts[0] if remaining_contacts else {}
+        user_patch["caretaker_name"] = str(fallback.get("name") or "")
+        user_patch["caretaker_phone"] = str(fallback.get("phone") or "")
+    updated_user = store.upsert_user(normalized_user_id, user_patch)
+    linked_account = _find_support_account_for_user(normalized_user_id, current_contact)
+    deleted_account = False
+    if linked_account:
+        deleted_account = bool(deleter(str(linked_account.get("account_id") or "")))
+    _append_audit(
+        normalized_user_id,
+        action="caretaker_removed",
+        summary=f"Support member {current_contact.get('name') or contact_id} was removed.",
+        actor_name=str(account.get("name") or ""),
+        actor_role="family_manager",
+        meta={"contact_id": contact_id},
+    )
+    return {"status": "success", "user": updated_user, "deleted_account": deleted_account}
 
 
 @app.post("/support/account/{account_id}/link-parent")

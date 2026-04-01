@@ -195,7 +195,7 @@ export type SupportWorkspace = {
   managed_users: UserProfile[]
   active: {
     user: UserProfile
-    support_contacts: Array<{ name: string; phone: string; role: string }>
+    support_contacts: Array<{ id?: string; name: string; phone: string; role: string; relation?: string; email?: string }>
     recent_conversations: ConversationItem[]
     medicine_logs: MedicineLog[]
     alerts: Array<{ time_created: string; type: string; severity: number; message: string }>
@@ -308,6 +308,27 @@ export async function postVoiceAudio({
 export async function getConversationHistory(user_id: string, limit = 30): Promise<ConversationItem[]> {
   const res = await fetch(`${API_BASE}/conversations/${encodeURIComponent(user_id)}?limit=${limit}`)
   return ((await asJson<{ items: ConversationItem[] }>(res)).items)
+}
+
+export async function addConversationHistory(
+  user_id: string,
+  payload: {
+    ts?: string
+    text_input: string
+    ai_response: string
+    mood?: string
+    emotion?: string
+    source?: string
+    health_logs?: string[]
+    alerts?: string[]
+  },
+) {
+  const res = await fetch(`${API_BASE}/conversations/${encodeURIComponent(user_id)}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  return asJson<{ status: string; item: ConversationItem }>(res)
 }
 
 export async function clearConversationHistory(user_id: string) {
@@ -586,6 +607,36 @@ export async function createCaretakerLogin(
     body: JSON.stringify(payload),
   })
   return asJson<{ status: string; account: SupportAccount; user: UserProfile }>(res)
+}
+
+export async function resetParentPassword(account_id: string, user_id: string, payload: { password: string }) {
+  const res = await fetch(`${API_BASE}/support/account/${encodeURIComponent(account_id)}/elders/${encodeURIComponent(user_id)}/reset-password`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  return asJson<{ status: string }>(res)
+}
+
+export async function updateCaretakerLogin(
+  account_id: string,
+  contact_id: string,
+  payload: { user_id: string; name?: string; relation?: string; role?: string; phone?: string; email?: string; password?: string },
+) {
+  const res = await fetch(`${API_BASE}/support/account/${encodeURIComponent(account_id)}/caretakers/${encodeURIComponent(contact_id)}`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  return asJson<{ status: string }>(res)
+}
+
+export async function deleteCaretakerLogin(account_id: string, contact_id: string, user_id: string) {
+  const res = await fetch(
+    `${API_BASE}/support/account/${encodeURIComponent(account_id)}/caretakers/${encodeURIComponent(contact_id)}?user_id=${encodeURIComponent(user_id)}`,
+    { method: 'DELETE' },
+  )
+  return asJson<{ status: string; deleted_account: boolean }>(res)
 }
 
 export async function testWhatsApp(payload: { user_id?: string; phone?: string; message?: string }) {

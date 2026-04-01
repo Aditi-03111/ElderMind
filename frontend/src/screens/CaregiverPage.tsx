@@ -10,18 +10,24 @@ import {
   createAlarm,
   createCaretakerLogin,
   createManagedElder,
+  deleteCaretakerLogin,
   deleteReport,
-  getAudit,
   getSupportWorkspace,
+  postVoice,
+  resetParentPassword,
+  reviewReportMedicines,
   saveMedicines,
+  sendSos,
   syncMedicineReminders,
   testWhatsApp,
+  updateCaretakerLogin,
   updateUserProfile,
   type AlarmItem,
   type AppSession,
   type MedicineItem,
   type SupportWorkspace,
 } from '../lib/api'
+import { runAssistantPlugin } from '../lib/assistantPlugins'
 import { regionalLanguages } from '../lib/regionalLanguages'
 import { getStoredSession } from '../lib/session'
 import Tesseract from 'tesseract.js'
@@ -47,6 +53,12 @@ type CaretakerForm = {
   password: string
   phone: string
   relation: string
+}
+
+type ReportReviewState = {
+  reportId: string
+  reportName: string
+  medicines: MedicineItem[]
 }
 
 function emptyParentForm(): ParentForm {
@@ -114,12 +126,19 @@ export function CaregiverPage() {
   const [caretakerForm, setCaretakerForm] = useState<CaretakerForm>(() => emptyCaretakerForm())
   const [reminderTitle, setReminderTitle] = useState('Medicine reminder')
   const [reminderTime, setReminderTime] = useState('')
+  const [commandText, setCommandText] = useState('')
   const [preferencesText, setPreferencesText] = useState('')
   const [medicines, setMedicines] = useState<MedicineItem[]>([])
+  const [supportDrafts, setSupportDrafts] = useState<Record<string, { name: string; relation: string; phone: string; email: string; password: string }>>({})
+  const [pendingReportReview, setPendingReportReview] = useState<ReportReviewState | null>(null)
+  const [parentPasswordDraft, setParentPasswordDraft] = useState('')
   const [savingCarePlan, setSavingCarePlan] = useState(false)
   const [savingMedicine, setSavingMedicine] = useState(false)
   const [savingParent, setSavingParent] = useState(false)
   const [savingCaretaker, setSavingCaretaker] = useState(false)
+  const [commandBusy, setCommandBusy] = useState(false)
+  const [parentPasswordBusy, setParentPasswordBusy] = useState(false)
+  const [supportActionBusy, setSupportActionBusy] = useState('')
   const [whatsAppBusy, setWhatsAppBusy] = useState(false)
   const [reportBusy, setReportBusy] = useState(false)
 
@@ -138,7 +157,6 @@ export function CaregiverPage() {
       if (payload.active?.user) {
         setPreferencesText((payload.active.user.preferences || []).join(', '))
         setMedicines(payload.active.medicines?.length ? payload.active.medicines : [])
-        void getAudit(payload.active.user.user_id, 20)
       } else {
         setPreferencesText('')
         setMedicines([])
@@ -167,12 +185,56 @@ export function CaregiverPage() {
     if (!active?.user) return
     setPreferencesText((active.user.preferences || []).join(', '))
     setMedicines(active.medicines?.length ? active.medicines : [])
+    setSupportDrafts(
+      Object.fromEntries(
+        (active.support_contacts || []).map((item, index) => [
+          item.id || `${item.name}-${index}`,
+          {
+            name: item.name || '',
+            relation: item.relation || item.role || '',
+            phone: item.phone || '',
+            email: item.email || '',
+            password: '',
+          },
+        ]),
+      ),
+    )
+    setParentPasswordDraft('')
   }, [active?.user?.user_id, active?.medicines])
 
   const upcomingAlarms = useMemo(
     () => (active?.alarms || []).filter((item) => new Date(item.time_iso).getTime() >= Date.now()),
     [active?.alarms],
   )
+  const adherenceStats = useMemo(() => {
+    const todayKey = new Date().toISOString().slice(0, 10)
+    const todayLogs = (active?.medicine_logs || []).filter((item) =>
+      String(item.confirmed_time || item.created_at || '').startsWith(todayKey),
+    )
+    const takenToday = todayLogs.filter((item) => item.status === 'taken').length
+    const missedToday = todayLogs.filter((item) => item.status === 'missed').length
+    const latestTaken = [...todayLogs].reverse().find((item) => item.status === 'taken')
+    return {
+      takenToday,
+      missedToday,
+      lastTakenLabel: latestTaken?.medicine_name
+        ? `${latestTaken.medicine_name} at ${new Date(latestTaken.confirmed_time || latestTaken.created_at).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+          })}`
+        : 'No dose confirmed today',
+    }
+  }, [active?.medicine_logs])
+  const overviewStats = useMemo(
+    () => [
+      { label: 'Medicines', value: String(active?.medicines?.length || 0) },
+      { label: 'Reminders', value: String(upcomingAlarms.length) },
+      { label: 'Caretakers', value: String(active?.support_contacts?.length || 0) },
+      { label: 'Reports', value: String(active?.reports?.length || 0) },
+    ],
+    [active?.medicines?.length, active?.reports?.length, active?.support_contacts?.length, upcomingAlarms.length],
+  )
+  const recentAudit = useMemo(() => (active?.audit || []).slice(0, 6), [active?.audit])
 
   if (!session || session.role !== 'support') {
     return (
@@ -331,26 +393,7 @@ export function CaregiverPage() {
         file_name: file.name,
         report_text: ocrText,
       })
-      if ((analysis.suggested_medicines || []).length) {
-        setMedicines((current) => {
-          const existing = new Set(current.map((item) => `${item.name.toLowerCase()}::${item.dose.toLowerCase()}`))
-          const imported = analysis.suggested_medicines
-            .filter((item) => {
-              const key = `${String(item.name || '').toLowerCase()}::${String(item.dose || '').toLowerCase()}`
-              return item.name && item.dose && !existing.has(key)
-            })
-            .map((item) => ({
-              id: crypto.randomUUID(),
-              name: item.name || '',
-              dose: item.dose || '',
-              times: item.times?.length ? item.times : ['08:00'],
-              instructions: item.instructions || '',
-              condition: item.condition || '',
-            }))
-          return [...current, ...imported]
-        })
-      }
-      await addReport(active.user.user_id, {
+      const savedReport = await addReport(active.user.user_id, {
         file_name: file.name,
         mime_type: file.type || 'image/jpeg',
         image_data_url: imageDataUrl,
@@ -358,14 +401,73 @@ export function CaregiverPage() {
         summary: analysis.summary,
         advice: analysis.advice,
       })
+      if ((analysis.suggested_medicines || []).length) {
+        setPendingReportReview({
+          reportId: savedReport.id,
+          reportName: file.name,
+          medicines: analysis.suggested_medicines.map((item) => ({
+            id: item.id || crypto.randomUUID(),
+            name: item.name || '',
+            dose: item.dose || '',
+            times: item.times?.length ? item.times : ['08:00'],
+            instructions: item.instructions || '',
+            condition: item.condition || '',
+          })),
+        })
+      } else {
+        setPendingReportReview(null)
+      }
       setMessage(
         (analysis.suggested_medicines || []).length
-          ? 'Report scanned. Medicines were pulled into the editable list below. Review and save to create reminders.'
+          ? 'Report scanned. Review the imported medicines below before they go live.'
           : 'Report scanned and saved.',
       )
       await load(active.user.user_id)
     } catch (e: unknown) {
       setError((e as { message?: string } | undefined)?.message || 'Could not scan the report')
+    } finally {
+      setReportBusy(false)
+    }
+  }
+
+  const approveReportImport = async () => {
+    if (!active?.user?.user_id || !pendingReportReview) return
+    try {
+      setReportBusy(true)
+      setError('')
+      const approved = pendingReportReview.medicines.filter((item) => item.name.trim())
+      await reviewReportMedicines(active.user.user_id, pendingReportReview.reportId, {
+        decision: 'approve',
+        medicines: approved,
+        actor_name: workspace?.account?.name || session?.display_name,
+        actor_role: 'family_manager',
+      })
+      await syncMedicineReminders(active.user.user_id)
+      setPendingReportReview(null)
+      setMessage('Imported medicines were approved and reminder times were synced.')
+      await load(active.user.user_id)
+    } catch (e: unknown) {
+      setError((e as { message?: string } | undefined)?.message || 'Could not approve imported medicines')
+    } finally {
+      setReportBusy(false)
+    }
+  }
+
+  const rejectReportImport = async () => {
+    if (!active?.user?.user_id || !pendingReportReview) return
+    try {
+      setReportBusy(true)
+      setError('')
+      await reviewReportMedicines(active.user.user_id, pendingReportReview.reportId, {
+        decision: 'reject',
+        actor_name: workspace?.account?.name || session?.display_name,
+        actor_role: 'family_manager',
+      })
+      setPendingReportReview(null)
+      setMessage('Imported medicines were rejected and not added to the live plan.')
+      await load(active.user.user_id)
+    } catch (e: unknown) {
+      setError((e as { message?: string } | undefined)?.message || 'Could not reject imported medicines')
     } finally {
       setReportBusy(false)
     }
@@ -381,8 +483,122 @@ export function CaregiverPage() {
     }
   }
 
+  const runManagerCommand = async () => {
+    if (!active?.user?.user_id || !commandText.trim()) return
+    try {
+      setCommandBusy(true)
+      setError('')
+      setMessage('')
+      const rawText = commandText.trim()
+      const plugin = runAssistantPlugin(rawText)
+
+      if (plugin.type === 'alarm') {
+        await createAlarm(active.user.user_id, {
+          title: plugin.payload.title || 'Reminder',
+          time_iso: plugin.payload.timeIso,
+          label: plugin.payload.label || rawText,
+          source: 'family_manager_command',
+        })
+        setMessage(`Reminder created for ${active.user.name}.`)
+        setCommandText('')
+        await load(active.user.user_id)
+        return
+      }
+
+      if (plugin.type === 'list_alarms') {
+        setMessage(
+          upcomingAlarms.length
+            ? upcomingAlarms
+                .slice(0, 3)
+                .map((alarm) => `${alarm.title} at ${new Date(alarm.time_iso).toLocaleString()}`)
+                .join(' | ')
+            : `No upcoming reminders for ${active.user.name}.`,
+        )
+        return
+      }
+
+      if (plugin.type === 'call') {
+        await callSupportChain()
+        setMessage(`Calling the support chain for ${active.user.name}.`)
+        return
+      }
+
+      if (plugin.type === 'sos') {
+        await sendSos({ user_id: active.user.user_id, reason: plugin.reason || rawText, severity: 90 })
+        await callSupportChain()
+        setMessage(`Urgent SOS sent for ${active.user.name}. Call flow started too.`)
+        setCommandText('')
+        return
+      }
+
+      const ai = await postVoice({ user_id: active.user.user_id, text: rawText })
+      setMessage(ai.text)
+      setCommandText('')
+    } catch (e: unknown) {
+      setError((e as { message?: string } | undefined)?.message || 'Could not run that manager command')
+    } finally {
+      setCommandBusy(false)
+    }
+  }
+
+  const submitParentPasswordReset = async () => {
+    if (!accountId || !active?.user?.user_id || !parentPasswordDraft.trim()) return
+    try {
+      setParentPasswordBusy(true)
+      setError('')
+      await resetParentPassword(accountId, active.user.user_id, { password: parentPasswordDraft.trim() })
+      setMessage(`Parent password updated for ${active.user.name}.`)
+      setParentPasswordDraft('')
+      await load(active.user.user_id)
+    } catch (e: unknown) {
+      setError((e as { message?: string } | undefined)?.message || 'Could not reset parent password')
+    } finally {
+      setParentPasswordBusy(false)
+    }
+  }
+
+  const saveSupportMember = async (contactId: string) => {
+    if (!accountId || !active?.user?.user_id) return
+    const draft = supportDrafts[contactId]
+    if (!draft) return
+    try {
+      setSupportActionBusy(`save:${contactId}`)
+      setError('')
+      await updateCaretakerLogin(accountId, contactId, {
+        user_id: active.user.user_id,
+        name: draft.name,
+        relation: draft.relation,
+        role: 'support',
+        phone: draft.phone,
+        email: draft.email,
+        password: draft.password || undefined,
+      })
+      setMessage(`Support member ${draft.name || 'contact'} updated.`)
+      await load(active.user.user_id)
+    } catch (e: unknown) {
+      setError((e as { message?: string } | undefined)?.message || 'Could not update support member')
+    } finally {
+      setSupportActionBusy('')
+    }
+  }
+
+  const removeSupportMember = async (contactId: string) => {
+    if (!accountId || !active?.user?.user_id) return
+    try {
+      setSupportActionBusy(`delete:${contactId}`)
+      setError('')
+      await deleteCaretakerLogin(accountId, contactId, active.user.user_id)
+      setMessage('Support member removed.')
+      await load(active.user.user_id)
+    } catch (e: unknown) {
+      setError((e as { message?: string } | undefined)?.message || 'Could not remove support member')
+    } finally {
+      setSupportActionBusy('')
+    }
+  }
+
   return (
-    <AppShell title="Family Hub" subtitle="Create parents, add caretakers, and manage reminders in one place.">
+    <AppShell title="Family Hub" subtitle="Manage parents, medicines, reminders, caretakers, and reports from one clean dashboard.">
       <Card>
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -500,11 +716,78 @@ export function CaregiverPage() {
       {active?.user ? (
         <>
           <Card>
-            <p className="text-lg font-extrabold tracking-tight text-ink">Active parent</p>
-            <div className="mt-3 rounded-2xl bg-white/70 p-3 shadow-soft ring-1 ring-black/5">
-              <p className="text-base font-extrabold text-ink">{active.user.name}</p>
-              <p className="mt-1 text-sm text-ink/60">{active.user.user_id} | {active.user.age} years | {active.user.language} | {active.user.city || active.user.region || 'Location pending'}</p>
-              <p className="mt-1 text-sm text-ink/60">Wake {active.user.wake_time} | Sleep {active.user.sleep_time}</p>
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.22em] text-ink/45">Selected parent</p>
+                <p className="mt-2 text-2xl font-extrabold tracking-tight text-ink">{active.user.name}</p>
+                <p className="mt-2 text-sm text-ink/60">{active.user.user_id} | {active.user.age} years | {active.user.language} | {active.user.city || active.user.region || 'Location pending'}</p>
+                <p className="mt-1 text-sm text-ink/60">Wake {active.user.wake_time} | Sleep {active.user.sleep_time}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {overviewStats.map((item) => (
+                  <div key={item.label} className="rounded-2xl bg-white/80 px-4 py-3 text-center shadow-soft ring-1 ring-black/5">
+                    <p className="text-xl font-extrabold text-ink">{item.value}</p>
+                    <p className="mt-1 text-xs font-semibold uppercase tracking-[0.18em] text-ink/50">{item.label}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </Card>
+
+          <Card>
+            <p className="text-lg font-extrabold tracking-tight text-ink">Quick management command</p>
+            <p className="mt-1 text-sm text-ink/60">Type things like "set alarm for 8 pm", "call support", "send SOS", or "play Ramayana for mom".</p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-[1fr,auto]">
+              <input
+                value={commandText}
+                onChange={(e) => setCommandText(e.target.value)}
+                placeholder="Type one manager command"
+                className="rounded-xl2 border-0 bg-white/75 px-3 py-3 text-base shadow-soft ring-1 ring-black/5"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    void runManagerCommand()
+                  }
+                }}
+              />
+              <PressableButton variant="primary" size="lg" onClick={() => void runManagerCommand()} disabled={commandBusy}>
+                {commandBusy ? 'Running...' : 'Run command'}
+              </PressableButton>
+            </div>
+          </Card>
+
+          <Card>
+            <p className="text-lg font-extrabold tracking-tight text-ink">Medicine adherence snapshot</p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              <div className="rounded-2xl bg-white/75 p-3 shadow-soft ring-1 ring-black/5">
+                <p className="text-sm font-semibold text-ink/60">Taken today</p>
+                <p className="mt-2 text-2xl font-extrabold text-ink">{adherenceStats.takenToday}</p>
+              </div>
+              <div className="rounded-2xl bg-white/75 p-3 shadow-soft ring-1 ring-black/5">
+                <p className="text-sm font-semibold text-ink/60">Missed today</p>
+                <p className="mt-2 text-2xl font-extrabold text-ink">{adherenceStats.missedToday}</p>
+              </div>
+              <div className="rounded-2xl bg-white/75 p-3 shadow-soft ring-1 ring-black/5">
+                <p className="text-sm font-semibold text-ink/60">Last confirmed dose</p>
+                <p className="mt-2 text-sm font-extrabold text-ink">{adherenceStats.lastTakenLabel}</p>
+              </div>
+            </div>
+          </Card>
+
+          <Card>
+            <p className="text-lg font-extrabold tracking-tight text-ink">Parent login recovery</p>
+            <p className="mt-1 text-sm text-ink/60">Reset the selected parent's password if they forget it.</p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-[1fr,auto]">
+              <input
+                type="password"
+                value={parentPasswordDraft}
+                onChange={(e) => setParentPasswordDraft(e.target.value)}
+                placeholder={`New password for ${active.user.user_id}`}
+                className="rounded-xl2 border-0 bg-white/75 px-3 py-3 text-base shadow-soft ring-1 ring-black/5"
+              />
+              <PressableButton variant="primary" size="lg" onClick={() => void submitParentPasswordReset()} disabled={parentPasswordBusy}>
+                {parentPasswordBusy ? 'Updating...' : 'Reset password'}
+              </PressableButton>
             </div>
           </Card>
 
@@ -596,6 +879,98 @@ export function CaregiverPage() {
               </PressableButton>
             </div>
           </Card>
+
+          {pendingReportReview ? (
+            <Card>
+              <p className="text-lg font-extrabold tracking-tight text-ink">Imported medicines review</p>
+              <p className="mt-1 text-sm text-ink/60">Review suggestions from {pendingReportReview.reportName} before they are added to the live medicine plan.</p>
+              <div className="mt-3 space-y-3">
+                {pendingReportReview.medicines.map((item, index) => (
+                  <div key={item.id || index} className="rounded-2xl bg-white/75 p-3 shadow-soft ring-1 ring-black/5">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm font-extrabold text-ink">{item.name || `Imported medicine ${index + 1}`}</p>
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-ink/45">
+                        {item.times?.length ? 'timed suggestion' : 'needs timing review'}
+                      </p>
+                    </div>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      {[
+                        ['Name', 'name'],
+                        ['Dose', 'dose'],
+                        ['Instructions', 'instructions'],
+                        ['Condition', 'condition'],
+                      ].map(([label, key]) => (
+                        <label key={key} className="block text-sm font-semibold text-ink/70">
+                          <span>{label}</span>
+                          <input
+                            value={String(item[key as keyof MedicineItem] || '')}
+                            onChange={(e) =>
+                              setPendingReportReview((current) =>
+                                current
+                                  ? {
+                                      ...current,
+                                      medicines: current.medicines.map((med, medIndex) =>
+                                        medIndex === index ? { ...med, [key]: e.target.value } : med,
+                                      ),
+                                    }
+                                  : current,
+                              )
+                            }
+                            className="mt-1 w-full rounded-xl2 border-0 bg-white px-3 py-3 text-base shadow-soft ring-1 ring-black/5"
+                          />
+                        </label>
+                      ))}
+                      <label className="block text-sm font-semibold text-ink/70">
+                        <span>Times</span>
+                        <input
+                          value={(item.times || []).join(', ')}
+                          onChange={(e) =>
+                            setPendingReportReview((current) =>
+                              current
+                                ? {
+                                    ...current,
+                                    medicines: current.medicines.map((med, medIndex) =>
+                                      medIndex === index
+                                        ? { ...med, times: e.target.value.split(',').map((time) => time.trim()).filter(Boolean) }
+                                        : med,
+                                    ),
+                                  }
+                                : current,
+                            )
+                          }
+                          placeholder="08:00, 20:00"
+                          className="mt-1 w-full rounded-xl2 border-0 bg-white px-3 py-3 text-base shadow-soft ring-1 ring-black/5"
+                        />
+                      </label>
+                    </div>
+                    <div className="mt-3">
+                      <PressableButton
+                        variant="soft"
+                        size="md"
+                        onClick={() =>
+                          setPendingReportReview((current) =>
+                            current
+                              ? { ...current, medicines: current.medicines.filter((_, medIndex) => medIndex !== index) }
+                              : current,
+                          )
+                        }
+                      >
+                        Reject this medicine
+                      </PressableButton>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <PressableButton variant="soft" size="lg" onClick={() => void rejectReportImport()} disabled={reportBusy}>
+                  {reportBusy ? 'Working...' : 'Reject import'}
+                </PressableButton>
+                <PressableButton variant="primary" size="lg" onClick={() => void approveReportImport()} disabled={reportBusy}>
+                  {reportBusy ? 'Working...' : 'Approve and sync'}
+                </PressableButton>
+              </div>
+            </Card>
+          ) : null}
 
           <Card>
             <p className="text-lg font-extrabold tracking-tight text-ink">Add caretaker login</p>
@@ -719,13 +1094,67 @@ export function CaregiverPage() {
 
           <Card>
             <p className="text-lg font-extrabold tracking-tight text-ink">Live support circle</p>
-            <div className="mt-3 space-y-2">
+            <p className="mt-1 text-sm text-ink/60">Edit linked support people, change their phone/email, or remove them from this parent.</p>
+            <div className="mt-3 space-y-3">
               {(active.support_contacts || []).map((item, index) => (
-                <div key={`${item.phone}-${index}`} className="rounded-2xl bg-white/70 p-3 shadow-soft ring-1 ring-black/5">
+                <div key={`${item.id || item.phone}-${index}`} className="rounded-2xl bg-white/70 p-3 shadow-soft ring-1 ring-black/5">
                   <p className="text-sm font-extrabold text-ink">{item.name}</p>
-                  <p className="mt-1 text-sm text-ink/60">
-                    {item.role} {item.phone ? `• ${item.phone}` : ''}
-                  </p>
+                  <p className="mt-1 text-sm text-ink/60">{item.role}{item.phone ? ` | ${item.phone}` : ''}</p>
+                  {item.id !== 'primary-support' ? (
+                    <>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                        {[
+                          ['Name', 'name'],
+                          ['Relation', 'relation'],
+                          ['Phone', 'phone'],
+                          ['Email', 'email'],
+                          ['New password', 'password'],
+                        ].map(([label, key]) => (
+                          <label key={key} className="block text-sm font-semibold text-ink/70">
+                            <span>{label}</span>
+                            <input
+                              type={key === 'password' ? 'password' : 'text'}
+                              value={supportDrafts[item.id || `${item.name}-${index}`]?.[key as 'name' | 'relation' | 'phone' | 'email' | 'password'] || ''}
+                              onChange={(e) =>
+                                setSupportDrafts((current) => ({
+                                  ...current,
+                                  [item.id || `${item.name}-${index}`]: {
+                                    ...(current[item.id || `${item.name}-${index}`] || {
+                                      name: item.name || '',
+                                      relation: item.relation || item.role || '',
+                                      phone: item.phone || '',
+                                      email: item.email || '',
+                                      password: '',
+                                    }),
+                                    [key]: e.target.value,
+                                  },
+                                }))
+                              }
+                              className="mt-1 w-full rounded-xl2 border-0 bg-white px-3 py-3 text-base shadow-soft ring-1 ring-black/5"
+                            />
+                          </label>
+                        ))}
+                      </div>
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        <PressableButton
+                          variant="soft"
+                          size="md"
+                          onClick={() => void removeSupportMember(item.id || `${item.name}-${index}`)}
+                          disabled={supportActionBusy === `delete:${item.id || `${item.name}-${index}`}`}
+                        >
+                          {supportActionBusy === `delete:${item.id || `${item.name}-${index}`}` ? 'Removing...' : 'Remove'}
+                        </PressableButton>
+                        <PressableButton
+                          variant="primary"
+                          size="md"
+                          onClick={() => void saveSupportMember(item.id || `${item.name}-${index}`)}
+                          disabled={supportActionBusy === `save:${item.id || `${item.name}-${index}`}`}
+                        >
+                          {supportActionBusy === `save:${item.id || `${item.name}-${index}`}` ? 'Saving...' : 'Save changes'}
+                        </PressableButton>
+                      </div>
+                    </>
+                  ) : null}
                 </div>
               ))}
             </div>
@@ -736,9 +1165,7 @@ export function CaregiverPage() {
             <div className="mt-3 space-y-2">
               {(active.alerts || []).slice().reverse().slice(0, 6).map((item, index) => (
                 <div key={`${item.time_created}-${index}`} className="rounded-2xl bg-white/70 p-3 shadow-soft ring-1 ring-black/5">
-                  <p className="text-sm font-extrabold text-ink">
-                    {item.type} • severity {item.severity}
-                  </p>
+                  <p className="text-sm font-extrabold text-ink">{item.type} | severity {item.severity}</p>
                   <p className="mt-1 text-sm text-ink/60">{item.message}</p>
                 </div>
               ))}
@@ -747,19 +1174,19 @@ export function CaregiverPage() {
           </Card>
 
           <Card>
-            <p className="text-lg font-extrabold tracking-tight text-ink">Recent conversation</p>
+            <p className="text-lg font-extrabold tracking-tight text-ink">Family activity</p>
             <div className="mt-3 space-y-2">
-              {(active.recent_conversations || []).slice().reverse().slice(0, 6).map((item) => (
+              {recentAudit.map((item) => (
                 <div key={item.id} className="rounded-2xl bg-white/70 p-3 shadow-soft ring-1 ring-black/5">
-                  <p className="text-sm text-ink/70">
-                    <span className="font-bold text-ink">User:</span> {item.text_input}
-                  </p>
-                  <p className="mt-2 text-sm font-semibold text-ink">
-                    <span className="font-extrabold">Bhumi:</span> {item.ai_response}
+                  <p className="text-sm font-extrabold text-ink">{item.summary}</p>
+                  <p className="mt-1 text-sm text-ink/60">
+                    {item.actor_name || 'Family Hub'}
+                    {item.actor_role ? ` | ${item.actor_role}` : ''}
+                    {item.created_at ? ` | ${new Date(item.created_at).toLocaleString()}` : ''}
                   </p>
                 </div>
               ))}
-              {!active.recent_conversations.length ? <p className="text-sm text-ink/60">No recent chats yet.</p> : null}
+              {!recentAudit.length ? <p className="text-sm text-ink/60">No management updates yet.</p> : null}
             </div>
           </Card>
         </>

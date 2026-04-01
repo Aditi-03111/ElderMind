@@ -354,6 +354,14 @@ class LocalStore:
         _save(self.paths.accounts, accounts)
         return merged
 
+    def delete_account(self, account_id: str) -> bool:
+        accounts = _load(self.paths.accounts, {})
+        if account_id not in accounts:
+            return False
+        accounts.pop(account_id, None)
+        _save(self.paths.accounts, accounts)
+        return True
+
     def add_managed_user(self, account_id: str, user_id: str) -> dict[str, Any] | None:
         account = self.get_account(account_id)
         if not account:
@@ -786,6 +794,10 @@ class MongoStore:
         merged = _merge_dict(current, payload)
         self.db.accounts.replace_one({"account_id": account_id}, {"_id": account_id, **merged}, upsert=True)
         return merged
+
+    def delete_account(self, account_id: str) -> bool:
+        result = self.db.accounts.delete_one({"account_id": account_id})
+        return bool(result.deleted_count)
 
     def add_managed_user(self, account_id: str, user_id: str) -> dict[str, Any] | None:
         current = self.get_account(account_id)

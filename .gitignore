@@ -26,3 +26,11 @@ extra_stuffs
 # Credentials / secrets
 **/*firebase-adminsdk*.json
 
+# Python cache
+__pycache__/
+*.pyc
+
+# Generated voice media
+backend_media/
+services/ai_service/media/
+

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'eldermind-v2'
+const CACHE_NAME = 'eldermind-v3'
 
 const CORE_ASSETS = [
   '/',
@@ -67,5 +67,53 @@ self.addEventListener('fetch', (event) => {
         return Response.error()
       }
     })(),
+  )
+})
+
+self.addEventListener('push', (event) => {
+  const payload = (() => {
+    try {
+      return event.data ? event.data.json() : {}
+    } catch {
+      return { title: 'Bhumi reminder', body: event.data?.text() || 'Open the app to check the latest update.' }
+    }
+  })()
+  const title = payload.title || 'Bhumi reminder'
+  const options = {
+    body: payload.body || 'Open the app to continue.',
+    icon: '/pwa-icon.svg',
+    badge: '/pwa-icon.svg',
+    data: { href: payload.href || '/index.html' },
+  }
+  event.waitUntil(self.registration.showNotification(title, options))
+})
+
+self.addEventListener('message', (event) => {
+  const data = event.data || {}
+  if (data?.type !== 'SHOW_NOTIFICATION') return
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'Bhumi', {
+      body: data.body || 'Open the app to continue.',
+      icon: '/pwa-icon.svg',
+      badge: '/pwa-icon.svg',
+      data: { href: data.href || '/index.html' },
+    }),
+  )
+})
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  const href = event.notification.data?.href || '/index.html'
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if ('focus' in client) {
+          client.navigate?.(href)
+          return client.focus()
+        }
+      }
+      if (self.clients.openWindow) return self.clients.openWindow(href)
+      return undefined
+    }),
   )
 })
