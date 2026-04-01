@@ -4,8 +4,8 @@ import { AppShell } from '../ui/AppShell'
 import { AuthPanel } from '../ui/AuthPanel'
 import { Card } from '../ui/Card'
 import { PressableButton } from '../ui/Pressable'
-import { SparkleSticker } from '../ui/stickers'
-import { getActivity, updateActivityStatus, type ActivitySummary, type AppSession } from '../lib/api'
+import { HeartPulseSticker, SparkleSticker } from '../ui/stickers'
+import { analyzeRppgVideo, getActivity, updateActivityStatus, type ActivitySummary, type AppSession, type RppgAnalysis } from '../lib/api'
 import { getStoredSession } from '../lib/session'
 
 
@@ -34,6 +34,8 @@ export function ActivityPage() {
   const [activity, setActivity] = useState<ActivitySummary | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [rppgBusy, setRppgBusy] = useState(false)
+  const [rppgResult, setRppgResult] = useState<RppgAnalysis | null>(null)
   const panelRef = useRef<HTMLDivElement | null>(null)
 
   const load = async () => {
@@ -64,6 +66,21 @@ export function ActivityPage() {
       setError((e as { message?: string } | undefined)?.message || 'Could not update status')
     } finally {
       setBusy(false)
+    }
+  }
+
+  const handleRppgUpload = async (file: File) => {
+    if (!session) return
+    try {
+      setRppgBusy(true)
+      setError('')
+      const result = await analyzeRppgVideo(session.user_id, file)
+      setRppgResult(result)
+      await load()
+    } catch (e: unknown) {
+      setError((e as { message?: string } | undefined)?.message || 'Could not run the camera wellness check')
+    } finally {
+      setRppgBusy(false)
     }
   }
 
@@ -127,6 +144,58 @@ export function ActivityPage() {
             <p className="mt-1 text-2xl font-extrabold tracking-tight text-ink">{activity?.mood_score ?? 0}</p>
           </div>
         </div>
+      </Card>
+
+      <Card>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-lg font-extrabold tracking-tight text-ink">Camera wellness check</p>
+            <p className="mt-1 text-sm text-ink/60">
+              Upload a short face video and Bhumi will estimate an experimental pulse and show the raw BVP signal.
+            </p>
+            <p className="mt-1 text-xs font-semibold uppercase tracking-[0.18em] text-ink/45">
+              Experimental only · not medical
+            </p>
+          </div>
+          <div className="rounded-2xl bg-rose/10 p-2 ring-1 ring-black/5">
+            <HeartPulseSticker className="h-12 w-12" />
+          </div>
+        </div>
+        <label className="mt-3 flex cursor-pointer items-center justify-center rounded-2xl border border-dashed border-ink/15 bg-white/70 px-4 py-6 text-sm font-semibold text-ink/70 shadow-soft">
+          <input
+            type="file"
+            accept="video/*"
+            capture="user"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              if (file) void handleRppgUpload(file)
+              e.currentTarget.value = ''
+            }}
+          />
+          {rppgBusy ? 'Analyzing face video...' : 'Choose or record a face video'}
+        </label>
+        {rppgResult ? (
+          <div className="mt-3 space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-2xl bg-white/70 p-3 shadow-soft ring-1 ring-black/5">
+                <p className="text-xs font-bold tracking-wide text-ink/60">Estimated pulse</p>
+                <p className="mt-1 text-2xl font-extrabold tracking-tight text-ink">{Math.round(rppgResult.bpm)} BPM</p>
+              </div>
+              <div className="rounded-2xl bg-white/70 p-3 shadow-soft ring-1 ring-black/5">
+                <p className="text-xs font-bold tracking-wide text-ink/60">Signal quality</p>
+                <p className="mt-1 text-2xl font-extrabold tracking-tight text-ink">{rppgResult.sqi.toFixed(2)}</p>
+              </div>
+            </div>
+            <p className="text-sm text-ink/70">{rppgResult.note}</p>
+            <p className="text-xs text-ink/55">{rppgResult.medical_notice}</p>
+            <img
+              src={rppgResult.plot_url}
+              alt="Raw BVP signal"
+              className="w-full rounded-2xl bg-white object-cover ring-1 ring-black/5"
+            />
+          </div>
+        ) : null}
       </Card>
 
       <Card>

@@ -18,6 +18,7 @@ from .gemini_client import gemini_generate_text
 from .groq_client import groq_chat_completion
 from .markers import ParsedMarkers, parse_markers
 from .prompt_loader import load_system_prompt
+from .rppg_analysis import analyze_rppg_video_bytes
 from .stt import transcribe_audio_bytes
 from .tavily_client import tavily_search
 from .tts import synthesize_mp3
@@ -641,6 +642,67 @@ async def analyze_report(payload: dict[str, Any]):
             structured_raw = ""
 
     return {"status": "success", **parsed, "suggested_medicines": _parse_medicine_suggestions(structured_raw, report_text)}
+
+
+@app.post("/rppg/analyze")
+async def analyze_rppg(request: Request):
+    form = await request.form()
+    user_id = str(form.get("user_id") or "").strip()
+    file = form.get("video")
+    if file is None or not hasattr(file, "read"):
+        return JSONResponse(status_code=400, content={"status": "error", "message": "video file is required"})
+
+    try:
+        video_bytes = await file.read()
+        result = analyze_rppg_video_bytes(video_bytes, file.filename or "face-video.mp4", settings.media_dir)
+    except Exception as exc:
+        message = str(exc)
+        if "Invalid data found when processing input" in message:
+            message = "Bhumi could not read that video. Please upload a short front-camera face video with a steady face and good light."
+        return JSONResponse(status_code=500, content={"status": "error", "message": message})
+
+    plot_url = f"{settings.base_url}/media/{result['plot_file']}"
+    note = (
+        f"Experimental camera wellness check estimated pulse near {round(result['bpm'])} BPM "
+        f"with signal quality {result['sqi']:.2f}. This is not a medical reading."
+    )
+
+    if user_id:
+        try:
+            async with httpx.AsyncClient(timeout=12) as client:
+                await client.post(
+                    f"{settings.data_service_url}/activity/{user_id}/status",
+                    json={
+                        "status": "okay",
+                        "mood": "okay",
+                        "note": note,
+                    },
+                )
+                await client.post(
+                    f"{settings.data_service_url}/conversations/{user_id}",
+                    json={
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                        "text_input": "[camera_wellness_check]",
+                        "ai_response": note,
+                        "mood": "okay",
+                        "emotion": "neutral",
+                        "source": "rppg",
+                    },
+                )
+        except Exception:
+            pass
+
+    return {
+        "status": "success",
+        "bpm": result["bpm"],
+        "sqi": result["sqi"],
+        "hrv": result["hrv"],
+        "raw_bvp": result["raw_bvp"],
+        "timestamps": result["timestamps"],
+        "plot_url": plot_url,
+        "note": note,
+        "medical_notice": "Experimental camera wellness check only. Do not use for diagnosis or emergency decisions.",
+    }
 
 
 @app.post("/voice")

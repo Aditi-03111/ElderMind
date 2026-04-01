@@ -722,3 +722,15 @@ Family flow:
 4. Each parent gets a unique parent `user_id` and password.
 5. Parents sign in separately with that parent `user_id`.
 6. Parent medicines, reminders, reports, chats, alerts, caretakers, and audit history are stored in MongoDB when `DATA_STORE_MODE=mongo`.
+
+## Experimental Camera Wellness Check
+
+- Bhumi now includes an experimental camera wellness check powered by `open-rppg`.
+- Upload a short face video from the parent-side `Activity` screen to estimate pulse and view the raw BVP plot.
+- This feature is not medical-grade and should not be used for diagnosis, SpO2, blood pressure, or emergency decisions.
+- Python dependencies:
+  - `open-rppg==0.1.1`
+  - `matplotlib==3.10.1`
+  - `setuptools<81`
+- Standalone script:
+  - `scripts/rppg_from_video.py`

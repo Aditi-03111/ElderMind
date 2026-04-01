@@ -18,6 +18,7 @@ import {
   reviewReportMedicines,
   saveMedicines,
   sendSos,
+  shareReportAnalysis,
   syncMedicineReminders,
   testWhatsApp,
   updateCaretakerLogin,
@@ -93,7 +94,7 @@ function emptyCaretakerForm(): CaretakerForm {
     email: '',
     password: '',
     phone: '',
-    relation: 'Caretaker',
+    relation: '',
   }
 }
 
@@ -102,7 +103,7 @@ function emptyManagerForm(): ManagerForm {
     name: '',
     email: '',
     phone: '',
-    relation: 'Son / Daughter',
+    relation: '',
   }
 }
 
@@ -228,7 +229,7 @@ export function CaregiverPage() {
       name: workspace.account.name || '',
       email: workspace.account.email || '',
       phone: workspace.account.phone || '',
-      relation: workspace.account.relation || 'Son / Daughter',
+      relation: workspace.account.relation || '',
     })
   }, [workspace?.account?.account_id, workspace?.account?.name, workspace?.account?.email, workspace?.account?.phone, workspace?.account?.relation])
 
@@ -519,6 +520,25 @@ export function CaregiverPage() {
       await load(active.user.user_id)
     } catch (e: unknown) {
       setError((e as { message?: string } | undefined)?.message || 'Could not reject imported medicines')
+    } finally {
+      setReportBusy(false)
+    }
+  }
+
+  const sendReportSummary = async (reportId: string, fileName: string) => {
+    if (!active?.user?.user_id) return
+    try {
+      setReportBusy(true)
+      setError('')
+      setMessage('')
+      const result = await shareReportAnalysis(active.user.user_id, reportId, {
+        actor_name: workspace?.account?.name || session?.display_name,
+        actor_role: 'family_manager',
+      })
+      setMessage(result.delivery?.message || `${fileName} analysis was shared with the support circle.`)
+      await load(active.user.user_id)
+    } catch (e: unknown) {
+      setError((e as { message?: string } | undefined)?.message || 'Could not share the report analysis')
     } finally {
       setReportBusy(false)
     }
@@ -1194,14 +1214,24 @@ export function CaregiverPage() {
                         {new Date(report.created_at).toLocaleString()}
                       </p>
                     </div>
-                    <PressableButton
-                      variant="soft"
-                      size="md"
-                      onClick={() => active.user.user_id && void deleteReport(active.user.user_id, report.id).then(() => load(active.user.user_id))}
-                    >
-                      Delete
-                    </PressableButton>
-                  </div>
+                      <PressableButton
+                        variant="soft"
+                        size="md"
+                        onClick={() => active.user.user_id && void deleteReport(active.user.user_id, report.id).then(() => load(active.user.user_id))}
+                      >
+                        Delete
+                      </PressableButton>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <PressableButton
+                        variant="soft"
+                        size="md"
+                        onClick={() => void sendReportSummary(report.id, report.file_name)}
+                        disabled={reportBusy}
+                      >
+                        {reportBusy ? 'Sending...' : 'Send analysis'}
+                      </PressableButton>
+                    </div>
                   {report.image_data_url ? (
                     <img src={report.image_data_url} alt={report.file_name} className="mt-3 h-40 w-full rounded-2xl object-cover ring-1 ring-black/5" />
                   ) : null}

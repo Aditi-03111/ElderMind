@@ -149,6 +149,40 @@ async def voice(request: Request):
     return await _proxy_json("POST", f"{settings.ai_service_url}/voice", json=payload)
 
 
+@app.post("/rppg/analyze")
+async def rppg_analyze(request: Request):
+    form = await request.form()
+    user_id = str(form.get("user_id") or "").strip()
+    video = form.get("video")
+    if video is None or not hasattr(video, "read"):
+        raise HTTPException(status_code=400, detail="video file is required")
+    try:
+        async with httpx.AsyncClient(timeout=240) as client:
+            files = {
+                "video": (
+                    video.filename or "face-video.mp4",
+                    await video.read(),
+                    video.content_type or "video/mp4",
+                )
+            }
+            data = {"user_id": user_id} if user_id else {}
+            res = await client.post(f"{settings.ai_service_url}/rppg/analyze", data=data, files=files)
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=502, detail=f"Upstream request failed: {exc}") from exc
+    if res.is_error:
+        detail: Any = res.text
+        try:
+            payload = res.json()
+            if isinstance(payload, dict):
+                detail = payload.get("detail") or payload.get("message") or payload
+            else:
+                detail = payload
+        except Exception:
+            pass
+        raise HTTPException(status_code=res.status_code, detail=detail)
+    return res.json()
+
+
 @app.post("/report/analyze")
 async def analyze_report(payload: dict[str, Any]):
     return await _proxy_json("POST", f"{settings.ai_service_url}/report/analyze", json=payload)
@@ -313,6 +347,11 @@ async def delete_report(user_id: str, report_id: str):
 @app.post("/reports/{user_id}/{report_id}/review")
 async def review_report(user_id: str, report_id: str, payload: dict[str, Any]):
     return await _proxy_json("POST", f"{settings.data_service_url}/reports/{user_id}/{report_id}/review", json=payload)
+
+
+@app.post("/reports/{user_id}/{report_id}/share")
+async def share_report(user_id: str, report_id: str, payload: dict[str, Any] | None = None):
+    return await _proxy_json("POST", f"{settings.data_service_url}/reports/{user_id}/{report_id}/share", json=payload or {})
 
 
 @app.get("/audit/{user_id}")

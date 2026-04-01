@@ -129,6 +129,18 @@ export type ActivitySummary = {
   recent_alerts: Array<{ time_created: string; type: string; severity: number; message: string }>
 }
 
+export type RppgAnalysis = {
+  status: 'success'
+  bpm: number
+  sqi: number
+  hrv?: Record<string, unknown>
+  raw_bvp: number[]
+  timestamps: number[]
+  plot_url: string
+  note: string
+  medical_notice: string
+}
+
 export type ConversationItem = {
   id: string
   ts: string
@@ -422,6 +434,19 @@ export async function reviewReportMedicines(
   return asJson<{ status: string; decision: string; medicines?: MedicineItem[] }>(res)
 }
 
+export async function shareReportAnalysis(
+  user_id: string,
+  report_id: string,
+  payload: { actor_name?: string; actor_role?: string; severity?: number } = {},
+) {
+  const res = await fetch(`${API_BASE}/reports/${encodeURIComponent(user_id)}/${encodeURIComponent(report_id)}/share`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  return asJson<{ status: string; delivery: { message: string; alerts_sent_to: string[] } }>(res)
+}
+
 export async function getAudit(user_id: string, limit = 40): Promise<AuditItem[]> {
   const res = await fetch(`${API_BASE}/audit/${encodeURIComponent(user_id)}?limit=${limit}`)
   return ((await asJson<{ status: string; items: AuditItem[] }>(res)).items)
@@ -495,6 +520,14 @@ export async function updateActivityStatus(user_id: string, payload: Record<stri
     body: JSON.stringify(payload),
   })
   return ((await asJson<{ activity: ActivitySummary }>(res)).activity)
+}
+
+export async function analyzeRppgVideo(user_id: string, video: File | Blob): Promise<RppgAnalysis> {
+  const fd = new FormData()
+  fd.set('user_id', user_id)
+  fd.set('video', video, video instanceof File ? video.name : 'face-video.webm')
+  const res = await fetch(`${API_BASE}/rppg/analyze`, { method: 'POST', body: fd })
+  return asJson<RppgAnalysis>(res)
 }
 
 export async function sendSos({

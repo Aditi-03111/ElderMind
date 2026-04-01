@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef } from 'react'
 import { gsap } from 'gsap'
 import { BottomNav } from './BottomNav'
+import { ElderSticker } from './stickers'
 import type React from 'react'
 
 export function AppShell({
@@ -38,11 +39,13 @@ export function AppShell({
         <header className="mb-4">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-sm font-semibold tracking-wide text-ink/60">Bhumi</p>
+              <p className="text-sm font-semibold tracking-[0.18em] text-ink/60">BHUMI</p>
               <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-ink">{title}</h1>
               {subtitle ? <p className="mt-1 text-base text-ink/70">{subtitle}</p> : null}
             </div>
-            <div className="mt-1 h-10 w-10 rounded-2xl bg-white/70 shadow-soft ring-1 ring-black/5" />
+            <div className="mt-1 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/70 shadow-soft ring-1 ring-black/5">
+              <ElderSticker className="h-9 w-9" tone="mint" />
+            </div>
           </div>
         </header>
 

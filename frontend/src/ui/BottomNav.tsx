@@ -54,6 +54,11 @@ export function BottomNav() {
   const ref = useRef<HTMLDivElement | null>(null)
   const active = currentKey()
 
+  const goTo = (href: string) => {
+    if (window.location.pathname === href) return
+    window.location.assign(href)
+  }
+
   useLayoutEffect(() => {
     const el = ref.current
     if (!el) return
@@ -85,9 +90,17 @@ export function BottomNav() {
               <li key={it.key}>
                 <a
                   href={it.href}
+                  onClick={(event) => {
+                    event.preventDefault()
+                    goTo(it.href)
+                  }}
+                  onTouchEnd={(event) => {
+                    event.preventDefault()
+                    goTo(it.href)
+                  }}
                   data-active={isActive ? 'true' : 'false'}
                   className={[
-                    'flex flex-col items-center justify-center rounded-xl2 px-1 py-2',
+                    'flex flex-col items-center justify-center rounded-xl2 px-1 py-2 touch-manipulation',
                     'transition-colors',
                     isActive ? 'bg-white/80 shadow-soft ring-1 ring-black/5' : 'hover:bg-white/50',
                   ].join(' ')}

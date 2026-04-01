@@ -1157,6 +1157,43 @@ async def review_report(user_id: str, report_id: str, payload: dict[str, Any]):
     return {"status": "success", "decision": decision}
 
 
+@app.post("/reports/{user_id}/{report_id}/share")
+async def share_report_analysis(user_id: str, report_id: str, payload: dict[str, Any] | None = None):
+    payload = payload or {}
+    report = next((item for item in store.list_reports(user_id, limit=200) if str(item.get("id") or "") == report_id), None)
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    async with httpx.AsyncClient(timeout=15) as client:
+        response = await client.post(
+            f"{settings.alerts_service_url}/report-share",
+            json={
+                "user_id": user_id,
+                "file_name": report.get("file_name"),
+                "summary": report.get("summary"),
+                "advice": report.get("advice"),
+                "severity": payload.get("severity") or 55,
+            },
+        )
+    if response.is_error:
+        detail: Any = response.text
+        try:
+            detail = response.json()
+        except Exception:
+            pass
+        raise HTTPException(status_code=response.status_code, detail=detail)
+
+    _append_audit(
+        user_id,
+        action="report_shared",
+        summary=f"Report analysis for {report.get('file_name') or 'report'} was shared with the support circle.",
+        actor_name=str(payload.get("actor_name") or ""),
+        actor_role=str(payload.get("actor_role") or ""),
+        meta={"report_id": report_id},
+    )
+    return {"status": "success", "report": report, "delivery": response.json()}
+
+
 @app.get("/activity/{user_id}")
 async def get_activity(user_id: str):
     return {"status": "success", "activity": _compute_activity(user_id)}

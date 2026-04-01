@@ -10,7 +10,7 @@ type AuthMode = 'login' | 'signup'
 async function requestAssistantPermissions() {
   try {
     if (navigator.mediaDevices?.getUserMedia) {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true })
       stream.getTracks().forEach((track) => track.stop())
     }
   } catch {
@@ -40,7 +40,7 @@ export function AuthPanel({
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [phone, setPhone] = useState('')
-  const [relation, setRelation] = useState('Son / Daughter')
+  const [relation, setRelation] = useState('')
 
   const submit = async () => {
     const trimmedName = name.trim()

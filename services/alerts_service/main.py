@@ -57,6 +57,41 @@ async def _fetch_activity(user_id: str) -> dict[str, Any]:
     return {}
 
 
+async def _send_support_message(user: dict[str, Any], payload: dict[str, Any], body: str) -> list[str]:
+    contacts = _support_contacts(user, payload) or [
+        {"name": "Primary support", "phone": "+91-9999999999", "role": "fallback"}
+    ]
+    sent_to: list[str] = []
+
+    if _twilio_ready():
+        client = TwilioClient(settings.twilio_account_sid, settings.twilio_auth_token)
+        for contact in contacts:
+            try:
+                msg = client.messages.create(
+                    from_=settings.twilio_from_phone,
+                    to=contact["phone"],
+                    body=body,
+                )
+                sent_to.append(f"sms:{contact['phone']}:{msg.sid}")
+            except Exception:
+                sent_to.append(f"sms_error:{contact['phone']}")
+    else:
+        sent_to.extend([f"stub:{contact['phone']}" for contact in contacts])
+
+    unique_targets: list[str] = []
+    seen_targets: set[str] = set()
+    for contact in contacts:
+        phone = str(contact.get("phone") or "").strip()
+        normalized = _normalize_whatsapp_phone(phone)
+        if not normalized or normalized in seen_targets:
+            continue
+        seen_targets.add(normalized)
+        unique_targets.append(phone)
+    for phone in unique_targets:
+        sent_to.append(await _send_meta_whatsapp(phone, body))
+    return sent_to
+
+
 def _support_contacts(user: dict[str, Any], payload: dict[str, Any]) -> list[dict[str, str]]:
     contacts: list[dict[str, str]] = []
     primary_phone = str(payload.get("to") or "").strip() or str(
@@ -179,6 +214,37 @@ async def whatsapp_test(payload: dict[str, Any]):
     }
 
 
+@app.post("/report-share")
+async def report_share(payload: dict[str, Any]):
+    user_id = str(payload.get("user_id") or "").strip()
+    if not user_id:
+        raise HTTPException(status_code=400, detail="user_id is required")
+    user = await _fetch_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="Parent profile not found")
+    file_name = str(payload.get("file_name") or "medical report").strip() or "medical report"
+    summary = str(payload.get("summary") or "").strip()
+    advice = str(payload.get("advice") or "").strip()
+    activity = await _fetch_activity(user_id)
+    base_message = _formal_alert_message(
+        user,
+        activity,
+        f"Report analysis shared from {file_name}",
+        int(payload.get("severity") or 55),
+    )
+    message = (
+        f"{base_message} "
+        f"Report summary: {summary or 'No summary available.'} "
+        f"Suggested next steps: {advice or 'Please review the report in the app.'}"
+    )
+    sent_to = await _send_support_message(user, payload, message)
+    return {
+        "status": "success",
+        "alerts_sent_to": sent_to,
+        "message": f"Report analysis shared with the support circle ({len(sent_to)} deliveries attempted).",
+    }
+
+
 @app.post("/sos")
 async def sos(payload: dict[str, Any]):
     user_id = str(payload.get("user_id") or "demo")
@@ -186,9 +252,7 @@ async def sos(payload: dict[str, Any]):
     activity = await _fetch_activity(user_id)
     reason = payload.get("reason") or "SOS pressed"
     severity = int(payload.get("severity") or 90)
-    contacts = _support_contacts(user, payload) or [
-        {"name": "Primary support", "phone": "+91-9999999999", "role": "fallback"}
-    ]
+    contacts = _support_contacts(user, payload) or [{"name": "Primary support", "phone": "+91-9999999999", "role": "fallback"}]
     alert = {
         "id": str(uuid4()),
         "type": "sos",
@@ -201,39 +265,7 @@ async def sos(payload: dict[str, Any]):
     }
     await _persist_alert(user_id, alert)
 
-    sent_to: list[str] = []
-    if _twilio_ready():
-        client = TwilioClient(settings.twilio_account_sid, settings.twilio_auth_token)
-        for contact in contacts:
-            try:
-                msg = client.messages.create(
-                    from_=settings.twilio_from_phone,
-                    to=contact["phone"],
-                    body=_formal_alert_message(user, activity, str(reason), severity),
-                )
-                sent_to.append(f"sms:{contact['phone']}:{msg.sid}")
-            except Exception:
-                sent_to.append(f"sms_error:{contact['phone']}")
-    else:
-        sent_to.extend([f"stub:{contact['phone']}" for contact in contacts])
-
-    if severity >= 80:
-        whatsapp_targets = [contact.get("phone") or "" for contact in contacts]
-        unique_targets: list[str] = []
-        seen_targets: set[str] = set()
-        for phone in whatsapp_targets:
-            normalized = _normalize_whatsapp_phone(phone)
-            if not normalized or normalized in seen_targets:
-                continue
-            seen_targets.add(normalized)
-            unique_targets.append(phone)
-        for phone in unique_targets:
-            sent_to.append(
-                await _send_meta_whatsapp(
-                    phone,
-                    _formal_alert_message(user, activity, str(reason), severity),
-                )
-            )
+    sent_to = await _send_support_message(user, payload, _formal_alert_message(user, activity, str(reason), severity))
 
     return {
         "status": "success",

@@ -45,15 +45,35 @@ export function stopSpeaking() {
 export async function playAudioUrl(url: string): Promise<void> {
   const a = new Audio(url)
   a.preload = 'auto'
+  a.crossOrigin = 'anonymous'
+  await new Promise<void>((resolve, reject) => {
+    const done = () => {
+      a.removeEventListener('canplaythrough', onReady)
+      a.removeEventListener('error', onError)
+      resolve()
+    }
+    const fail = (message: string) => {
+      a.removeEventListener('canplaythrough', onReady)
+      a.removeEventListener('error', onError)
+      reject(new Error(message))
+    }
+    const onReady = () => done()
+    const onError = () => fail('Audio could not be loaded')
+    a.addEventListener('canplaythrough', onReady, { once: true })
+    a.addEventListener('error', onError, { once: true })
+    a.load()
+  })
   await a.play()
 }
 
 export function listenOnce({
   lang = 'en-IN',
   timeoutMs = 9000,
+  pauseMs = 5000,
 }: {
   lang?: string
   timeoutMs?: number
+  pauseMs?: number
 }): Promise<{ transcript: string }> {
   return new Promise((resolve, reject) => {
     const w = window as unknown as { SpeechRecognition?: SpeechRecognitionCtor; webkitSpeechRecognition?: SpeechRecognitionCtor }
@@ -62,10 +82,11 @@ export function listenOnce({
 
     const rec = new SR()
     rec.lang = lang
-    rec.interimResults = false
+    rec.interimResults = true
     rec.maxAlternatives = 1
 
     let done = false
+    let transcript = ''
     const finish = (fn: () => void) => {
       if (done) return
       done = true
@@ -77,32 +98,61 @@ export function listenOnce({
       fn()
     }
 
-    const timer = window.setTimeout(() => {
+    const totalTimer = window.setTimeout(() => {
       finish(() => reject(new Error('Listening timed out')))
     }, timeoutMs)
 
+    let pauseTimer = window.setTimeout(() => {
+      finish(() =>
+        transcript.trim()
+          ? resolve({ transcript: transcript.trim() })
+          : reject(new Error('Listening timed out')),
+      )
+    }, pauseMs)
+
+    const resetPauseTimer = () => {
+      window.clearTimeout(pauseTimer)
+      pauseTimer = window.setTimeout(() => {
+        finish(() =>
+          transcript.trim()
+            ? resolve({ transcript: transcript.trim() })
+            : reject(new Error('Listening timed out')),
+        )
+      }, pauseMs)
+    }
+
     rec.onresult = (event: unknown) => {
       const ev = event as SpeechRecognitionResultEventLike
-      const transcript = ev?.results?.[0]?.[0]?.transcript?.toString?.() || ''
-      window.clearTimeout(timer)
-      finish(() => resolve({ transcript }))
+      const results = ev?.results
+      if (!results?.length) return
+      const lastResult = results[results.length - 1]
+      const nextTranscript = lastResult?.[0]?.transcript?.toString?.() || ''
+      if (nextTranscript) transcript = nextTranscript
+      resetPauseTimer()
     }
     rec.onerror = (e: unknown) => {
-      window.clearTimeout(timer)
+      window.clearTimeout(totalTimer)
+      window.clearTimeout(pauseTimer)
       const msg = (e as { error?: string } | undefined)?.error || 'Speech recognition error'
       finish(() => reject(new Error(msg)))
     }
     rec.onend = () => {
-      window.clearTimeout(timer)
-      finish(() => reject(new Error('Listening ended without result')))
+      if (done) return
+      window.clearTimeout(totalTimer)
+      window.clearTimeout(pauseTimer)
+      if (transcript.trim()) {
+        finish(() => resolve({ transcript: transcript.trim() }))
+        return
+      }
+      finish(() => reject(new Error('No speech detected')))
     }
 
     try {
       rec.start()
     } catch (e: unknown) {
-      window.clearTimeout(timer)
+      window.clearTimeout(totalTimer)
+      window.clearTimeout(pauseTimer)
       finish(() => reject(e))
     }
   })
 }
-

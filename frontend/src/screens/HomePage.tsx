@@ -404,8 +404,15 @@ export function HomePage() {
         : await postVoice({ user_id: session.user_id, text: commandText, lat: geo?.lat, lon: geo?.lon })
       setLastBot(res.text)
       setLastEmotion(`${res.mood}${res.emotion ? ` | ${res.emotion}` : ''}`)
-      if (res.audio_url) await playAudioUrl(res.audio_url)
-      else speak(res.text, { lang: responseSpeechLang(res, profile) })
+      if (res.audio_url) {
+        try {
+          await playAudioUrl(res.audio_url)
+        } catch {
+          speak(res.text, { lang: responseSpeechLang(res, profile) })
+        }
+      } else {
+        speak(res.text, { lang: responseSpeechLang(res, profile) })
+      }
       await afterReply(res.text)
     } catch (e: unknown) {
       setError((e as { message?: string } | undefined)?.message || 'Could not send your message')
