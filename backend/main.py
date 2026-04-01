@@ -4,22 +4,25 @@ from datetime import datetime, timedelta, timezone
 from typing import Literal
 from uuid import uuid4
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+import httpx
+import os
+import asyncio
 
 
 class UserProfile(BaseModel):
     user_id: str
-    name: str = "Ramesh"
+    name: str = "Anikeat"
     age: int = 72
     language: str = "en"
     region: str = "karnataka"
     city: str = "tumkur"
     wake_time: str = "07:00"
     sleep_time: str = "21:00"
-    caregiver_name: str = "Kiran"
-    caregiver_phone: str = "+91-9999999999"
+    caregiver_name: str = "Prajwal"
+    caregiver_phone: str = "+917903422423"
 
 
 class Medicine(BaseModel):
@@ -97,6 +100,13 @@ app.add_middleware(
 
 
 # ---- In-memory demo store (swap with Firebase later) ----
+WHATSAPP_TOKEN = os.getenv("WHATSAPP_ACCESS_TOKEN", "")
+WHATSAPP_PHONE_ID = os.getenv("WHATSAPP_PHONE_NUMBER_ID", "")
+
+VAPI_API_KEY = os.getenv("VAPI_API_KEY", "")
+VAPI_ASSISTANT_ID = os.getenv("VAPI_ASSISTANT_ID", "")
+VAPI_PHONE_ID = os.getenv("VAPI_PHONE_NUMBER_ID", "")
+
 DEMO_USER = UserProfile(user_id="demo")
 
 MEDS: dict[str, Medicine] = {
@@ -202,15 +212,30 @@ def confirm_medicine(med_id: str, body: MedicineConfirmRequest):
 
 
 @app.post("/voice", response_model=VoiceResponse)
-def voice(body: VoiceRequest):
+async def voice(request: Request):
+    user_id = "demo"
+    text = ""
+    mood_hint = None
+    
+    ctype = (request.headers.get("content-type") or "").lower()
+    if "application/json" in ctype:
+        body = await request.json()
+        user_id = str(body.get("user_id") or user_id)
+        text = body.get("text") or ""
+        mood_hint = body.get("mood_hint")
+    else:
+        form = await request.form()
+        user_id = str(form.get("user_id") or user_id)
+        text = form.get("text") or ""
+        mood_hint = form.get("mood_hint")
+
     profile = DEMO_USER
-    text = body.text or ""
     reply, mood, emotion, severity, alert = _gentle_reply(text, profile)
-    if body.mood_hint:
-        mood = body.mood_hint
+    if mood_hint:
+        mood = mood_hint
 
     turn = ConversationTurn(ts=_now(), text_input=text, ai_response=reply, mood=mood, emotion=emotion)
-    CONV.setdefault(body.user_id, []).append(turn)
+    CONV.setdefault(user_id, []).append(turn)
 
     if alert:
         ALERTS.append(
@@ -235,24 +260,97 @@ def voice(body: VoiceRequest):
     )
 
 
+async def _send_whatsapp_message(to: str, message: str) -> str | None:
+    if not (WHATSAPP_TOKEN and WHATSAPP_PHONE_ID):
+        return "whatsapp_not_configured"
+
+    url = f"https://graph.facebook.com/v23.0/{WHATSAPP_PHONE_ID}/messages"
+    headers = {
+        "Authorization": f"Bearer {WHATSAPP_TOKEN}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "messaging_product": "whatsapp",
+        "recipient_type": "individual",
+        "to": to,
+        "type": "text",
+        "text": {"body": message},
+    }
+
+    async with httpx.AsyncClient(timeout=15) as client:
+        try:
+            res = await client.post(url, headers=headers, json=payload)
+            res.raise_for_status()
+            data = res.json()
+            return f"whatsapp:{data.get('messages', [{}])[0].get('id', 'unknown')}"
+        except Exception as e:
+            return f"whatsapp_error:{str(e)}"
+
+async def _send_vapi_call(to: str, text: str) -> str | None:
+    if not (VAPI_API_KEY and VAPI_ASSISTANT_ID and VAPI_PHONE_ID):
+        return "vapi_not_configured"
+        
+    url = "https://api.vapi.ai/call"
+    headers = {
+        "Authorization": f"Bearer {VAPI_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    # Vapi allows passing a custom first message via the assistant overrides
+    payload = {
+        "assistantId": VAPI_ASSISTANT_ID,
+        "phoneNumberId": VAPI_PHONE_ID,
+        "customer": {
+            "number": to
+        },
+        "assistant": {
+            "firstMessage": text
+        }
+    }
+    
+    async with httpx.AsyncClient(timeout=15) as client:
+        try:
+            res = await client.post(url, headers=headers, json=payload)
+            res.raise_for_status()
+            return f"vapi_call:{res.json().get('id')}"
+        except Exception as e:
+            return f"vapi_error:{str(e)}"
+
+
 @app.post("/sos", response_model=SosResponse)
-def sos(body: SosRequest):
+async def sos(request: Request):
+    ctype = (request.headers.get("content-type") or "").lower()
+    if "application/json" in ctype:
+        body = await request.json()
+    else:
+        # Fallback if form data
+        form = await request.form()
+        body = {"user_id": form.get("user_id"), "reason": form.get("reason"), "location": None}
+
+    user_id = body.get("user_id") or "demo"
     profile = DEMO_USER
     severity = 90
-    message = body.reason or "SOS pressed"
+    message = body.get("reason") or "SOS pressed"
     alert = {
         "id": str(uuid4()),
         "type": "sos",
         "severity": severity,
         "time_created": _now().isoformat(),
         "message": message,
-        "user_id": body.user_id,
-        "location": body.location,
+        "user_id": user_id,
+        "location": body.get("location"),
     }
     ALERTS.append(alert)
+    
+    # 2. WhatsApp Cloud API
+    caregiver_phone = profile.caregiver_phone
+    wa_result = await _send_whatsapp_message("+919999999999" if caregiver_phone == "+91-9999999999" else caregiver_phone, f"ElderMind SOS: {message} (severity {severity})")
+    
+    # 3. Vapi Voice AI Call
+    vapi_result = await _send_vapi_call(caregiver_phone, f"This is an automated emergency SOS alert from ElderMind for {profile.name}. The reason for the alert is: {message}. Please check on them immediately.")
+
     return SosResponse(
         status="success",
-        alerts_sent_to=[profile.caregiver_phone],
+        alerts_sent_to=[caregiver_phone, wa_result, vapi_result],
         timestamp=_now(),
         severity=severity,
         message=f"Sent SOS to {profile.caregiver_name}.",
