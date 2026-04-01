@@ -203,27 +203,65 @@ export function HomePage() {
     })
   }
 
-  const recordOnce = async (ms = 5200): Promise<Blob> => {
+  const recordOnce = async (maxMs = 9000): Promise<Blob> => {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
     return await new Promise((resolve, reject) => {
       const chunks: BlobPart[] = []
       const rec = new MediaRecorder(stream)
+      
+      const AudioContextCtor = window.AudioContext || (window as any).webkitAudioContext
+      let rafId: number
+      let audioCtx: AudioContext | null = null
+      
+      if (AudioContextCtor) {
+        audioCtx = new AudioContextCtor()
+        const source = audioCtx.createMediaStreamSource(stream)
+        const analyser = audioCtx.createAnalyser()
+        analyser.minDecibels = -55
+        analyser.fftSize = 256
+        source.connect(analyser)
+        
+        const dataArray = new Uint8Array(analyser.frequencyBinCount)
+        let silenceStart = Date.now()
+        let hasSpoken = false
+        
+        const checkAudio = () => {
+          analyser.getByteFrequencyData(dataArray)
+          let sum = 0
+          for (let i = 0; i < dataArray.length; i++) sum += dataArray[i]
+          const avg = sum / dataArray.length
+          
+          if (avg > 15) {
+            hasSpoken = true
+            silenceStart = Date.now()
+          } else if (hasSpoken && Date.now() - silenceStart > 1200) {
+            try { rec.stop() } catch {}
+            return
+          }
+          rafId = requestAnimationFrame(checkAudio)
+        }
+        checkAudio()
+      }
+
       rec.ondataavailable = (e) => {
         if (e.data && e.data.size > 0) chunks.push(e.data)
       }
-      rec.onerror = () => reject(new Error('Audio recording failed'))
+      rec.onerror = () => {
+        if (rafId) cancelAnimationFrame(rafId)
+        if (audioCtx) void audioCtx.close()
+        reject(new Error('Audio recording failed'))
+      }
       rec.onstop = () => {
+        if (rafId) cancelAnimationFrame(rafId)
+        if (audioCtx) void audioCtx.close()
         for (const track of stream.getTracks()) track.stop()
         resolve(new Blob(chunks, { type: 'audio/webm' }))
       }
+      
       rec.start()
       window.setTimeout(() => {
-        try {
-          rec.stop()
-        } catch {
-          // ignore
-        }
-      }, ms)
+        try { rec.stop() } catch {}
+      }, maxMs)
     })
   }
 
@@ -393,7 +431,7 @@ export function HomePage() {
         const heard = await listenOnce({ lang: browserLang(profile), timeoutMs: 9000 })
         transcript = heard.transcript
       } catch {
-        audioBlob = await recordOnce(5200)
+        audioBlob = await recordOnce(9000)
       }
       setSpeaking(false)
       await sendAssistantMessage(transcript, audioBlob)

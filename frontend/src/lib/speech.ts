@@ -93,7 +93,8 @@ export function listenOnce({
       finish(() => reject(new Error(msg)))
     }
     rec.onend = () => {
-      // ignore: timer/handlers resolve or reject
+      window.clearTimeout(timer)
+      finish(() => reject(new Error('Listening ended without result')))
     }
 
     try {
