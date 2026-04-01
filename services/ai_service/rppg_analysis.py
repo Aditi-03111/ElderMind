@@ -58,15 +58,15 @@ def analyze_rppg_video_bytes(video_bytes: bytes, filename: str, media_dir: str) 
     sqi = float(result.get("SQI") or 0.0)
     hrv = result.get("hrv") or {}
 
-    raw_bvp = raw_bvp if raw_bvp is not None else []
-    timestamps = timestamps if timestamps is not None else []
+    raw_bvp = list(raw_bvp) if raw_bvp is not None else []
+    timestamps = list(timestamps) if timestamps is not None else []
 
     plt, _ = _lazy_imports()
     plot_name = f"rppg-{uuid4().hex}.png"
     plot_path = media_root / plot_name
 
     fig = plt.figure(figsize=(10, 4))
-    if raw_bvp and timestamps:
+    if len(raw_bvp) > 0 and len(timestamps) > 0:
         plt.plot(timestamps, raw_bvp, color="#E4506D", linewidth=1.4)
     else:
         plt.text(0.5, 0.5, "Insufficient signal data", ha="center", va="center",
