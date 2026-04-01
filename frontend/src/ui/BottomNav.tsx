@@ -1,0 +1,109 @@
+import { useLayoutEffect, useRef } from 'react'
+import { gsap } from 'gsap'
+import { ElderSticker, HeartPulseSticker, PillSticker, SparkleSticker } from './stickers'
+import type React from 'react'
+
+type NavItem = {
+  href: string
+  label: string
+  key: 'home' | 'medication' | 'activity' | 'alert' | 'summary'
+  Icon: (props: React.SVGProps<SVGSVGElement>) => React.ReactNode
+}
+
+const items: NavItem[] = [
+  {
+    key: 'home',
+    href: '/index.html',
+    label: 'Home',
+    Icon: (p) => <ElderSticker {...p} tone="mint" />,
+  },
+  {
+    key: 'medication',
+    href: '/medication.html',
+    label: 'Meds',
+    Icon: (p) => <PillSticker {...p} />,
+  },
+  {
+    key: 'activity',
+    href: '/activity.html',
+    label: 'Status',
+    Icon: (p) => <SparkleSticker {...p} />,
+  },
+  {
+    key: 'alert',
+    href: '/alert.html',
+    label: 'Help',
+    Icon: (p) => <HeartPulseSticker {...p} />,
+  },
+  {
+    key: 'summary',
+    href: '/summary.html',
+    label: 'Week',
+    Icon: (p) => <SparkleSticker {...p} />,
+  },
+]
+
+function currentKey(): NavItem['key'] {
+  const page = (document.body.dataset.page || 'home').toLowerCase()
+  if (page === 'medication' || page === 'activity' || page === 'alert' || page === 'summary') return page
+  return 'home'
+}
+
+export function BottomNav() {
+  const ref = useRef<HTMLDivElement | null>(null)
+  const active = currentKey()
+
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+
+    const activeEl = el.querySelector(`[data-active="true"]`) as HTMLElement | null
+    if (!activeEl) return
+
+    const ctx = gsap.context(() => {
+      gsap.fromTo(
+        activeEl,
+        { y: 6, opacity: 0.7 },
+        { y: 0, opacity: 1, duration: 0.55, ease: 'elastic.out(1,0.6)' },
+      )
+    }, el)
+
+    return () => ctx.revert()
+  }, [active])
+
+  return (
+    <div
+      ref={ref}
+      className="fixed bottom-3 left-0 right-0 z-30 mx-auto w-[min(430px,calc(100%-24px))]"
+    >
+      <nav className="glass rounded-2xl shadow-float ring-1 ring-black/5">
+        <ul className="grid grid-cols-5 gap-1 p-2">
+          {items.map((it) => {
+            const isActive = it.key === active
+            return (
+              <li key={it.key}>
+                <a
+                  href={it.href}
+                  data-active={isActive ? 'true' : 'false'}
+                  className={[
+                    'flex flex-col items-center justify-center rounded-xl2 px-1 py-2',
+                    'transition-colors',
+                    isActive ? 'bg-white/80 shadow-soft ring-1 ring-black/5' : 'hover:bg-white/50',
+                  ].join(' ')}
+                >
+                  <span className={['h-8 w-8', isActive ? 'animate-gentleFloat' : ''].join(' ')}>
+                    {it.Icon({ className: 'h-8 w-8' })}
+                  </span>
+                  <span className="mt-1 text-[12px] font-semibold tracking-wide text-ink/80">
+                    {it.label}
+                  </span>
+                </a>
+              </li>
+            )
+          })}
+        </ul>
+      </nav>
+    </div>
+  )
+}
+
