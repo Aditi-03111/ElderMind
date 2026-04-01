@@ -36,3 +36,6 @@ __pycache__/
 backend_media/
 services/ai_service/media/
 
+# Local fallback data store
+data_store/*.json
+.claude/

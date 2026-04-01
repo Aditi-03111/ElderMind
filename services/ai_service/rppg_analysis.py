@@ -48,23 +48,36 @@ def analyze_rppg_video_bytes(video_bytes: bytes, filename: str, media_dir: str) 
         except Exception:
             pass
 
+    if result is None:
+        raise ValueError(
+            "Could not detect a clear pulse signal from the video. "
+            "Please try again with better lighting and keep your face steady."
+        )
+
     bpm = float(result.get("hr") or 0.0)
     sqi = float(result.get("SQI") or 0.0)
     hrv = result.get("hrv") or {}
+
+    raw_bvp = raw_bvp if raw_bvp is not None else []
+    timestamps = timestamps if timestamps is not None else []
 
     plt, _ = _lazy_imports()
     plot_name = f"rppg-{uuid4().hex}.png"
     plot_path = media_root / plot_name
 
-    plt.figure(figsize=(10, 4))
-    plt.plot(timestamps, raw_bvp, color="#E4506D", linewidth=1.4)
+    fig = plt.figure(figsize=(10, 4))
+    if raw_bvp and timestamps:
+        plt.plot(timestamps, raw_bvp, color="#E4506D", linewidth=1.4)
+    else:
+        plt.text(0.5, 0.5, "Insufficient signal data", ha="center", va="center",
+                 transform=fig.transFigure, fontsize=14, color="#999")
     plt.title("Bhumi Camera Wellness Check - Raw BVP")
     plt.xlabel("Time (seconds)")
     plt.ylabel("BVP amplitude")
     plt.grid(True, alpha=0.25)
     plt.tight_layout()
     plt.savefig(plot_path, dpi=160)
-    plt.close()
+    plt.close(fig)
 
     return {
         "bpm": bpm,

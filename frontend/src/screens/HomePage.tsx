@@ -46,6 +46,13 @@ function localActionText(text: string, english: string, hindi: string) {
   return isHindiLike(text) ? hindi : english
 }
 
+function normalizeTypedWakeCommand(text: string, wakeWords: string[]) {
+  const trimmed = text.trim()
+  if (!trimmed) return ''
+  if (!includesWakeWord(trimmed, wakeWords)) return trimmed
+  return stripWakeWords(trimmed, wakeWords)
+}
+
 export function HomePage() {
   const [session, setSession] = useState<AppSession | null>(() => getStoredSession())
   const [profile, setProfile] = useState<UserProfile | null>(null)
@@ -288,7 +295,18 @@ export function HomePage() {
 
   const sendAssistantMessage = async (message: string, audioBlob?: Blob, options?: { skipPlugin?: boolean }) => {
     if (!session) return
-    const commandText = message.trim()
+    const rawText = message.trim()
+    const commandText = options?.skipPlugin ? rawText : normalizeTypedWakeCommand(rawText, wakeWords)
+
+    if (!options?.skipPlugin && rawText && includesWakeWord(rawText, wakeWords) && !commandText) {
+      const wakeReply = localActionText(rawText, 'Yes? Tell me what you need.', 'Haan ji, bataiye kya chahiye?')
+      setLastUser(rawText)
+      setLastBot(wakeReply)
+      speak(wakeReply, { lang: browserLang(profile) })
+      await saveLocalHistory(rawText, wakeReply)
+      return
+    }
+
     if (!commandText && !audioBlob) return
 
     if (pendingAlarmPrompt && commandText) {
@@ -575,6 +593,12 @@ export function HomePage() {
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                if (!busy && input.trim()) void sendAssistantMessage(input)
+              }
+            }}
             rows={3}
             placeholder="Type a question, prayer request, symptom, or family note..."
             className="mt-2 w-full rounded-xl2 border-0 bg-white px-3 py-3 text-base shadow-soft ring-1 ring-black/5"

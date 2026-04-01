@@ -32,7 +32,6 @@ import {
 import { runAssistantPlugin } from '../lib/assistantPlugins'
 import { regionalLanguages } from '../lib/regionalLanguages'
 import { getStoredSession } from '../lib/session'
-import { BellSticker, ElderSticker, FamilySticker, HeartPulseSticker, PillSticker, SparkleSticker } from '../ui/stickers'
 import Tesseract from 'tesseract.js'
 
 type ParentForm = {

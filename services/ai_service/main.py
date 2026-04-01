@@ -276,7 +276,11 @@ def _fallback_reply(
     alerts: list[str],
     response_lang_code: str,
 ) -> str:
+    import random
+
     name = str(profile.get("name") or "Friend")
+
+    # --- contextual (non-random) replies take priority -----------------------
     if response_lang_code == "en":
         if "doha" in user_text.lower():
             return f"{name}, here is a gentle doha: slowly and with patience, everything comes in time. [MOOD_LOG: good]"
@@ -286,54 +290,132 @@ def _fallback_reply(
             return f"{name}, I am with you. I am telling your support person right now. [ALERT: urgent_health]"
         if "headache" in health_logs:
             return f"{name}, a headache feels hard. Please rest a little and drink some water. [HEALTH_LOG: headache]"
-        if mood == "low":
-            return f"{name}, it feels lonely, na. Talk to me, I am right here. [MOOD_LOG: low]"
-        if mood == "anxious":
-            return f"{name}, do not worry, we will take this one step at a time. I am with you. [MOOD_LOG: anxious]"
-        return f"{name}, I am listening. Please speak slowly. [MOOD_LOG: okay]"
-    if response_lang_code == "kn":
-        if mood == "low":
-            return f"{name} avare, ಒಂಟಿಯಾಗಿದೆಯೇ? ನಾನು ಇಲ್ಲಿದ್ದೇನೆ. [MOOD_LOG: low]"
-        if mood == "anxious":
-            return f"{name} avare, ಚಿಂತಿಸಬೇಡಿ. ನಿಧಾನವಾಗಿ ನೋಡೋಣ. [MOOD_LOG: anxious]"
-        return f"{name} avare, ನಾನು ಕೇಳುತ್ತಿದ್ದೇನೆ. ಆರಾಮವಾಗಿ ಹೇಳಿ. [MOOD_LOG: okay]"
-    if response_lang_code == "ta":
-        if mood == "low":
-            return f"{name}, தனியாக இருக்கிற மாதிரி தோன்றுகிறதா? நான் இருக்கிறேன். [MOOD_LOG: low]"
-        if mood == "anxious":
-            return f"{name}, கவலைப்பட வேண்டாம். நிதானமாக பார்க்கலாம். [MOOD_LOG: anxious]"
-        return f"{name}, நான் கேட்டு கொண்டிருக்கிறேன். அமைதியாக சொல்லுங்கள். [MOOD_LOG: okay]"
-    if response_lang_code == "te":
-        if mood == "low":
-            return f"{name} garu, ఒంటరిగా అనిపిస్తున్నదా? నేను మీతోనే ఉన్నాను. [MOOD_LOG: low]"
-        if mood == "anxious":
-            return f"{name} garu, ఆందోళన పడకండి. నెమ్మదిగా చూద్దాం. [MOOD_LOG: anxious]"
-        return f"{name} garu, నేను వింటున్నాను. నెమ్మదిగా చెప్పండి. [MOOD_LOG: okay]"
-    if response_lang_code == "gu":
-        if mood == "low":
-            return f"{name}, એકલું લાગી રહ્યું છે ને? હું અહીં છું. [MOOD_LOG: low]"
-        if mood == "anxious":
-            return f"{name}, ચિંતા ન કરો. ધીમે ધીમે જોઈએ. [MOOD_LOG: anxious]"
-        return f"{name}, હું સાંભળી રહ્યો છું. આરામથી કહો. [MOOD_LOG: okay]"
-    if response_lang_code == "mr":
-        if mood == "low":
-            return f"{name}, एकटं वाटत आहे ना? मी इथेच आहे. [MOOD_LOG: low]"
-        if mood == "anxious":
-            return f"{name}, काळजी करू नका. आपण हळूहळू पाहू. [MOOD_LOG: anxious]"
-        return f"{name}, मी ऐकत आहे. शांतपणे सांगा. [MOOD_LOG: okay]"
-    if "doha" in user_text.lower():
-        return f"{name} ji, suno: Dhire dhire re mana, dhire sab kuch hoye. Sab kuch apne samay par hota hai. [MOOD_LOG: good]"
-    if "prayer" in user_text.lower() or "chalisa" in user_text.lower():
-        return f"{name} ji, chalo ek chhoti prarthana saath karte hain. Main hoon, aap aaraam se suno. [MOOD_LOG: good]"
-    if "fall" in health_logs or "urgent_health" in alerts:
-        return f"{name} ji, main aapke saath hoon. Main ab caretaker ko bata raha hoon. [ALERT: urgent_health]"
-    if "headache" in health_logs:
-        return f"{name} ji, sar dard mushkil hota hai. Thoda rest kijiye aur paani pee lijiye. [HEALTH_LOG: headache]"
-    if mood == "low":
-        return f"{name} ji, akela lag raha hai na. Baat kariye, main yahin hoon. [MOOD_LOG: low]"
-    if mood == "anxious":
-        return f"{name} ji, chinta mat kijiye, hum ek-ek baat dheere se dekhenge. Main saath hoon. [MOOD_LOG: anxious]"
-    return f"{name} ji, main sun raha hoon. Aap aaraam se boliye. [MOOD_LOG: okay]"
+    elif response_lang_code not in ("kn", "ta", "te", "gu", "mr"):
+        # Hindi / default contextual checks
+        if "doha" in user_text.lower():
+            return f"{name} ji, suno: Dhire dhire re mana, dhire sab kuch hoye. Sab kuch apne samay par hota hai. [MOOD_LOG: good]"
+        if "prayer" in user_text.lower() or "chalisa" in user_text.lower():
+            return f"{name} ji, chalo ek chhoti prarthana saath karte hain. Main hoon, aap aaraam se suno. [MOOD_LOG: good]"
+        if "fall" in health_logs or "urgent_health" in alerts:
+            return f"{name} ji, main aapke saath hoon. Main ab caretaker ko bata raha hoon. [ALERT: urgent_health]"
+        if "headache" in health_logs:
+            return f"{name} ji, sar dard mushkil hota hai. Thoda rest kijiye aur paani pee lijiye. [HEALTH_LOG: headache]"
+
+    # --- randomised pools so the elder never hears the same line twice -------
+    _pools: dict[str, dict[str, list[str]]] = {
+        "en": {
+            "low": [
+                f"{name}, it feels lonely, na. Talk to me, I am right here. [MOOD_LOG: low]",
+                f"{name}, I know it is hard sometimes. I am not going anywhere. [MOOD_LOG: low]",
+                f"{name}, you are not alone. Tell me what is on your mind. [MOOD_LOG: low]",
+            ],
+            "anxious": [
+                f"{name}, do not worry, we will take this one step at a time. I am with you. [MOOD_LOG: anxious]",
+                f"{name}, take a deep breath with me. Everything will be alright. [MOOD_LOG: anxious]",
+                f"{name}, let us slow down together. There is no rush. [MOOD_LOG: anxious]",
+            ],
+            "okay": [
+                f"{name}, I am listening. Please speak slowly. [MOOD_LOG: okay]",
+                f"{name}, I am here whenever you want to talk. [MOOD_LOG: okay]",
+                f"{name}, tell me more, I am all ears. [MOOD_LOG: okay]",
+                f"{name}, take your time, I am right here with you. [MOOD_LOG: okay]",
+            ],
+        },
+        "kn": {
+            "low": [
+                f"{name} avare, ಒಂಟಿಯಾಗಿದೆಯೇ? ನಾನು ಇಲ್ಲಿದ್ದೇನೆ. [MOOD_LOG: low]",
+                f"{name} avare, ನಿಮಗೆ ಕಷ್ಟವಾಗಿದೆ ಎಂದು ಗೊತ್ತು. ನಾನು ಜೊತೆಗಿದ್ದೇನೆ. [MOOD_LOG: low]",
+            ],
+            "anxious": [
+                f"{name} avare, ಚಿಂತಿಸಬೇಡಿ. ನಿಧಾನವಾಗಿ ನೋಡೋಣ. [MOOD_LOG: anxious]",
+                f"{name} avare, ಒಂದು ದೀರ್ಘ ಉಸಿರು ತೆಗೆದುಕೊಳ್ಳಿ. ಎಲ್ಲಾ ಸರಿಯಾಗುತ್ತದೆ. [MOOD_LOG: anxious]",
+            ],
+            "okay": [
+                f"{name} avare, ನಾನು ಕೇಳುತ್ತಿದ್ದೇನೆ. ಆರಾಮವಾಗಿ ಹೇಳಿ. [MOOD_LOG: okay]",
+                f"{name} avare, ಹೇಳಿ, ನಾನು ಇಲ್ಲೇ ಇದ್ದೇನೆ. [MOOD_LOG: okay]",
+            ],
+        },
+        "ta": {
+            "low": [
+                f"{name}, தனியாக இருக்கிற மாதிரி தோன்றுகிறதா? நான் இருக்கிறேன். [MOOD_LOG: low]",
+                f"{name}, கஷ்டமா இருக்கு என்று தெரியும். நான் உங்கள் பக்கத்தில் இருக்கிறேன். [MOOD_LOG: low]",
+            ],
+            "anxious": [
+                f"{name}, கவலைப்பட வேண்டாம். நிதானமாக பார்க்கலாம். [MOOD_LOG: anxious]",
+                f"{name}, ஒரு பெரிய மூச்சு எடுங்கள். எல்லாம் சரியாகும். [MOOD_LOG: anxious]",
+            ],
+            "okay": [
+                f"{name}, நான் கேட்டு கொண்டிருக்கிறேன். அமைதியாக சொல்லுங்கள். [MOOD_LOG: okay]",
+                f"{name}, சொல்லுங்கள், நான் இங்கே இருக்கிறேன். [MOOD_LOG: okay]",
+            ],
+        },
+        "te": {
+            "low": [
+                f"{name} garu, ఒంటరిగా అనిపిస్తున్నదా? నేను మీతోనే ఉన్నాను. [MOOD_LOG: low]",
+                f"{name} garu, కష్టంగా ఉందని తెలుసు. నేను ఇక్కడే ఉన్నాను. [MOOD_LOG: low]",
+            ],
+            "anxious": [
+                f"{name} garu, ఆందోళన పడకండి. నెమ్మదిగా చూద్దాం. [MOOD_LOG: anxious]",
+                f"{name} garu, ఒక పెద్ద శ్వాస తీసుకోండి. అంతా బాగవుతుంది. [MOOD_LOG: anxious]",
+            ],
+            "okay": [
+                f"{name} garu, నేను వింటున్నాను. నెమ్మదిగా చెప్పండి. [MOOD_LOG: okay]",
+                f"{name} garu, చెప్పండి, నేను ఇక్కడే ఉన్నాను. [MOOD_LOG: okay]",
+            ],
+        },
+        "gu": {
+            "low": [
+                f"{name}, એકલું લાગી રહ્યું છે ને? હું અહીં છું. [MOOD_LOG: low]",
+                f"{name}, મુશ્કેલ છે એ ખબર છે. હું તમારી સાથે છું. [MOOD_LOG: low]",
+            ],
+            "anxious": [
+                f"{name}, ચિંતા ન કરો. ધીમે ધીમે જોઈએ. [MOOD_LOG: anxious]",
+                f"{name}, એક ઊંડો શ્વાસ લો. બધું સારું થશે. [MOOD_LOG: anxious]",
+            ],
+            "okay": [
+                f"{name}, હું સાંભળી રહ્યો છું. આરામથી કહો. [MOOD_LOG: okay]",
+                f"{name}, કહો, હું અહીં છું. [MOOD_LOG: okay]",
+            ],
+        },
+        "mr": {
+            "low": [
+                f"{name}, एकटं वाटत आहे ना? मी इथेच आहे. [MOOD_LOG: low]",
+                f"{name}, कठीण आहे हे माहीत आहे. मी तुमच्या सोबत आहे. [MOOD_LOG: low]",
+            ],
+            "anxious": [
+                f"{name}, काळजी करू नका. आपण हळूहळू पाहू. [MOOD_LOG: anxious]",
+                f"{name}, एक मोठा श्वास घ्या. सर्व ठीक होईल. [MOOD_LOG: anxious]",
+            ],
+            "okay": [
+                f"{name}, मी ऐकत आहे. शांतपणे सांगा. [MOOD_LOG: okay]",
+                f"{name}, सांगा, मी इथे आहे. [MOOD_LOG: okay]",
+            ],
+        },
+    }
+    # Hindi / default pool
+    _pools["hi"] = {
+        "low": [
+            f"{name} ji, akela lag raha hai na. Baat kariye, main yahin hoon. [MOOD_LOG: low]",
+            f"{name} ji, mushkil waqt hai, lekin main saath hoon. [MOOD_LOG: low]",
+            f"{name} ji, aap akele nahi hain. Main hamesha yahin hoon. [MOOD_LOG: low]",
+        ],
+        "anxious": [
+            f"{name} ji, chinta mat kijiye, hum ek-ek baat dheere se dekhenge. Main saath hoon. [MOOD_LOG: anxious]",
+            f"{name} ji, ek lambi saans lijiye. Sab theek hoga. [MOOD_LOG: anxious]",
+            f"{name} ji, dheere dheere chalte hain. Koi jaldi nahi hai. [MOOD_LOG: anxious]",
+        ],
+        "okay": [
+            f"{name} ji, main sun raha hoon. Aap aaraam se boliye. [MOOD_LOG: okay]",
+            f"{name} ji, bataaiye, main yahin hoon. [MOOD_LOG: okay]",
+            f"{name} ji, aapki baat sun raha hoon. Jab chahe boliye. [MOOD_LOG: okay]",
+            f"{name} ji, koi jaldi nahi, aaraam se boliye. [MOOD_LOG: okay]",
+        ],
+    }
+
+    lang = response_lang_code if response_lang_code in _pools else "hi"
+    pool = _pools[lang]
+    bucket = mood if mood in pool else "okay"
+    return random.choice(pool[bucket])
 
 
 def _fallback_report_analysis(report_text: str, profile: dict[str, Any]) -> dict[str, str]:
@@ -677,6 +759,8 @@ async def analyze_rppg(request: Request):
     try:
         video_bytes = await file.read()
         result = analyze_rppg_video_bytes(video_bytes, file.filename or "face-video.mp4", settings.media_dir)
+    except ValueError as exc:
+        return JSONResponse(status_code=422, content={"status": "error", "message": str(exc)})
     except Exception as exc:
         message = str(exc)
         if "Invalid data found when processing input" in message:

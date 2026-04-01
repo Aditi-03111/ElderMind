@@ -75,7 +75,10 @@ copy .env.example .env
 # MONGO_DB_NAME=eldermind
 
 # Start all microservices + gateway
-.\run_all.ps1
+.\run_all.cmd
+
+# Or, if you prefer PowerShell directly
+powershell -ExecutionPolicy Bypass -File .\run_all.ps1
 ```
 
 ### Step 2: Frontend Setup
