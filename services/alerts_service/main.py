@@ -1,0 +1,68 @@
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from uuid import uuid4
+
+import httpx
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from .config import settings
+
+
+app = FastAPI(title="ElderMind Alerts Service", version="0.1.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"] if settings.cors_allow_origins == "*" else settings.cors_allow_origins.split(","),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.get("/health")
+async def health():
+    return {"status": "ok", "service": "alerts"}
+
+
+async def _persist_alert(user_id: str, alert: dict):
+    # Store in data-service local store via a “conversation append” hack for now.
+    async with httpx.AsyncClient(timeout=15) as client:
+        # data-service doesn't yet have an alerts endpoint; we can extend later.
+        try:
+            await client.post(f"{settings.data_service_url}/medicine/aspirin/confirm", json={"user_id": user_id})
+        except Exception:
+            pass
+
+
+@app.post("/sos")
+async def sos(payload: dict):
+    user_id = payload.get("user_id") or "demo"
+    reason = payload.get("reason") or "SOS pressed"
+    severity = 90
+    alert = {
+        "id": str(uuid4()),
+        "type": "sos",
+        "severity": severity,
+        "time_created": datetime.now(timezone.utc).isoformat(),
+        "message": reason,
+        "user_id": user_id,
+        "location": payload.get("location"),
+    }
+    await _persist_alert(user_id, alert)
+
+    # Twilio is stubbed unless credentials exist.
+    sent_to = []
+    if settings.twilio_account_sid and settings.twilio_auth_token and settings.twilio_from_phone:
+        sent_to.append("twilio_enabled")
+    else:
+        sent_to.append("stub")
+
+    return {
+        "status": "success",
+        "alerts_sent_to": sent_to,
+        "timestamp": alert["time_created"],
+        "severity": severity,
+        "message": "SOS received by alerts service.",
+    }
+

@@ -12,6 +12,8 @@ export function AlertPage() {
   const [result, setResult] = useState<string>('')
   const buttonRef = useRef<HTMLButtonElement | null>(null)
 
+  type Geo = { lat: number; lng: number }
+
   useLayoutEffect(() => {
     const el = buttonRef.current
     if (!el) return
@@ -67,9 +69,9 @@ export function AlertPage() {
                     ;(async () => {
                       try {
                         setBusy(true)
-                        const loc =
+                        const loc: Geo | undefined =
                           'geolocation' in navigator
-                            ? await new Promise<any>((resolve) => {
+                            ? await new Promise<Geo | undefined>((resolve) => {
                                 navigator.geolocation.getCurrentPosition(
                                   (p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude }),
                                   () => resolve(undefined),
@@ -81,8 +83,8 @@ export function AlertPage() {
                         setResult(`${res.message} (severity ${res.severity})`)
                         setArmed(false)
                         window.scrollTo({ top: 0, behavior: 'smooth' })
-                      } catch (e: any) {
-                        setResult(e?.message || 'SOS failed')
+                      } catch (e: unknown) {
+                        setResult((e as { message?: string } | undefined)?.message || 'SOS failed')
                       } finally {
                         setBusy(false)
                       }

@@ -1,5 +1,4 @@
-export const API_BASE =
-  (import.meta as any).env?.VITE_API_BASE?.toString?.() || 'http://localhost:8000'
+export const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
 
 export type VoiceResponse = {
   status: 'success'
@@ -15,15 +14,19 @@ export async function postVoice({
   user_id,
   text,
   mood_hint,
+  lat,
+  lon,
 }: {
   user_id: string
   text: string
   mood_hint?: VoiceResponse['mood']
+  lat?: number
+  lon?: number
 }): Promise<VoiceResponse> {
   const res = await fetch(`${API_BASE}/voice`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ user_id, text, mood_hint }),
+    body: JSON.stringify({ user_id, text, mood_hint, lat, lon }),
   })
   if (!res.ok) throw new Error(`Voice request failed: ${res.status}`)
   return (await res.json()) as VoiceResponse
@@ -53,7 +56,7 @@ export async function sendSos({
 }: {
   user_id: string
   reason?: string
-  location?: any
+  location?: unknown
 }) {
   const res = await fetch(`${API_BASE}/sos`, {
     method: 'POST',

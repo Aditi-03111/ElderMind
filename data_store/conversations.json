@@ -1,0 +1,12 @@
+{
+  "demo": [
+    {
+      "id": "8f7d4a33-0492-4142-b130-35eabcc1974c",
+      "ts": "2026-04-01T09:28:27.520272+00:00",
+      "text_input": "[medicine_confirm] aspirin",
+      "ai_response": "logged",
+      "mood": "okay",
+      "emotion": "neutral"
+    }
+  ]
+}

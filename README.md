@@ -41,8 +41,8 @@ ElderMind is a **voice-first AI companion** that talks to elderly Indians in the
 ## 🚀 Quick Start (5 Minutes)
 
 ### Prerequisites
-- Python 3.9+
-- Node.js 16+
+- Python 3.12 or 3.13 recommended (backend uses FastAPI + Pydantic v2)
+- Node.js 18+
 - Git
 
 ### Step 1: Backend Setup
@@ -52,23 +52,16 @@ ElderMind is a **voice-first AI companion** that talks to elderly Indians in the
 git clone https://github.com/yourname/eldermind.git
 cd eldermind
 
-# Create Python environment
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+# Create Python environment (Windows PowerShell)
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
 
 # Install dependencies
+python -m pip install -U pip
 pip install -r requirements.txt
 
-# Download Whisper model (one-time, 244MB)
-python -c "import whisper; whisper.load_model('small')"
-
-# Copy environment template
-cp .env.example .env
-# Edit .env with API keys (see API Keys section)
-
-# Run backend
-cd backend
-uvicorn main:app --reload --port 8000
+# Start all microservices + gateway
+.\run_all.ps1
 ```
 
 ### Step 2: Frontend Setup
@@ -82,8 +75,16 @@ npm run dev
 
 ### Step 3: Open Browser
 ```
-http://localhost:3000
+http://localhost:5173/index.html
 ```
+
+### Pages (multi-page app)
+- Elder UI: `http://localhost:5173/index.html`
+- Medicines: `http://localhost:5173/medication.html`
+- Activity: `http://localhost:5173/activity.html`
+- Emergency: `http://localhost:5173/alert.html`
+- Weekly: `http://localhost:5173/summary.html`
+- Caregiver dashboard: `http://localhost:5173/caregiver.html`
 
 ---
 

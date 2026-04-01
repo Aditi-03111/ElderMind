@@ -4,6 +4,10 @@ import { AppShell } from '../ui/AppShell'
 import { Card } from '../ui/Card'
 import { PressableButton } from '../ui/Pressable'
 import { PillSticker } from '../ui/stickers'
+import { API_BASE } from '../lib/api'
+import { notify } from '../lib/notifications'
+import { saveMedLog } from '../lib/db'
+import { nowMs, uid } from '../lib/ids'
 
 type Med = {
   id: string
@@ -42,6 +46,23 @@ export function MedicationPage() {
     setTaken((t) => {
       const next = { ...t, [id]: !t[id] }
       return next
+    })
+    void saveMedLog({
+      id: uid(),
+      createdAt: nowMs(),
+      medId: id,
+      status: 'taken',
+    })
+    // Also inform backend (demo logging).
+    void fetch(`${API_BASE}/medicine/${encodeURIComponent(id)}/confirm`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ user_id: 'demo' }),
+    }).catch(() => {})
+
+    void notify('Nice job — medicine taken', {
+      body: 'I’m proud of you. Want a sip of water too?',
+      icon: '/pwa-icon.svg',
     })
   }
 

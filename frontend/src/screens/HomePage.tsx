@@ -7,6 +7,8 @@ import { PressableButton } from '../ui/Pressable'
 import { ElderSticker, SparkleSticker } from '../ui/stickers'
 import { listenOnce, speak, stopSpeaking } from '../lib/speech'
 import { postVoice } from '../lib/api'
+import { saveConversation } from '../lib/db'
+import { nowMs, uid } from '../lib/ids'
 
 export function HomePage() {
   const [speaking, setSpeaking] = useState(false)
@@ -45,6 +47,17 @@ export function HomePage() {
     return () => ctx.revert()
   }, [speaking])
 
+  const getGeoOnce = async (): Promise<{ lat: number; lon: number } | null> => {
+    if (!('geolocation' in navigator)) return null
+    return await new Promise((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+        () => resolve(null),
+        { enableHighAccuracy: false, timeout: 6000, maximumAge: 5 * 60_000 },
+      )
+    })
+  }
+
   const runVoice = async () => {
     setError('')
     if (busy) return
@@ -62,12 +75,20 @@ export function HomePage() {
       setSpeaking(false)
 
       setBusy(true)
-      const res = await postVoice({ user_id: 'demo', text: transcript })
+      const geo = await getGeoOnce()
+      const res = await postVoice({ user_id: 'demo', text: transcript, lat: geo?.lat, lon: geo?.lon })
       setLastBot(res.text)
+      void saveConversation({
+        id: uid(),
+        createdAt: nowMs(),
+        userText: transcript,
+        botText: res.text,
+        mood: res.mood,
+      })
       speak(res.text, { lang: 'en-IN', rate: 0.92, pitch: 1.02 })
-    } catch (e: any) {
+    } catch (e: unknown) {
       setSpeaking(false)
-      setError(e?.message || 'Something went wrong')
+      setError((e as { message?: string } | undefined)?.message || 'Something went wrong')
     } finally {
       setBusy(false)
     }
@@ -151,6 +172,11 @@ export function HomePage() {
           <a href="/alert.html" className="block">
             <PressableButton className="w-full" variant="danger" size="lg">
               Emergency
+            </PressableButton>
+          </a>
+          <a href="/caregiver.html" className="block">
+            <PressableButton className="w-full" variant="soft" size="lg">
+              Caregiver
             </PressableButton>
           </a>
         </div>

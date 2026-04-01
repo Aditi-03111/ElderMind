@@ -4,8 +4,9 @@ import { MedicationPage } from './screens/MedicationPage'
 import { ActivityPage } from './screens/ActivityPage'
 import { AlertPage } from './screens/AlertPage'
 import { SummaryPage } from './screens/SummaryPage'
+import { CaregiverPage } from './screens/CaregiverPage'
 
-export type ElderMindPage = 'home' | 'medication' | 'activity' | 'alert' | 'summary'
+export type ElderMindPage = 'home' | 'medication' | 'activity' | 'alert' | 'summary' | 'caregiver'
 
 export function renderPage({ root, page }: { root: Root; page: string }) {
   const normalized = page.toLowerCase() as ElderMindPage
@@ -25,6 +26,9 @@ export function renderPage({ root, page }: { root: Root; page: string }) {
       return
     case 'summary':
       root.render(<SummaryPage />)
+      return
+    case 'caregiver':
+      root.render(<CaregiverPage />)
       return
     default:
       root.render(<HomePage />)

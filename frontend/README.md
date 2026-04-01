@@ -12,6 +12,14 @@ Then open:
 
 - `http://localhost:5173/index.html`
 
+## Backend (gateway)
+
+Set `VITE_API_BASE` to point at the gateway:
+
+```bash
+VITE_API_BASE=http://127.0.0.1:8010
+```
+
 ## Pages
 
 - Home: `index.html`
@@ -19,12 +27,15 @@ Then open:
 - Activity: `activity.html`
 - Emergency: `alert.html`
 - Weekly: `summary.html`
+- Caregiver: `caregiver.html`
 
 ## Notes
 
 - **GSAP** powers micro-interactions and UI motion.
 - **Barba.js** powers page transitions between the HTML entrypoints.
 - **PWA**: `public/manifest.webmanifest` + `public/sw.js` (registered in `src/main.tsx`).
+- **Voice**: browser SpeechRecognition (STT) + SpeechSynthesis (TTS) on Home.
+- **Offline**: lightweight IndexedDB storage via `idb` (`src/lib/db.ts`).
 
 # React + TypeScript + Vite
 

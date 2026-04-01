@@ -4,9 +4,14 @@
 
 ```bash
 cd backend
+python -V
+# Recommended: Python 3.12 or 3.13 (FastAPI + Pydantic v2).
+#
+# If you are on Python 3.14, `pydantic-core` may require Rust/Cargo to compile.
+
 python -m venv venv
-# Windows:
-venv\Scripts\activate
+# Windows PowerShell:
+venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
 ```

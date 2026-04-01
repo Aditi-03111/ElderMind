@@ -3,8 +3,26 @@ export type SpeechSupport = {
   tts: boolean
 }
 
+type SpeechRecognitionCtor = new () => SpeechRecognitionLike
+
+type SpeechRecognitionLike = {
+  lang: string
+  interimResults: boolean
+  maxAlternatives: number
+  start: () => void
+  stop: () => void
+  onresult: ((event: unknown) => void) | null
+  onerror: ((event: unknown) => void) | null
+  onend: (() => void) | null
+}
+
+type SpeechRecognitionResultEventLike = {
+  results?: ArrayLike<ArrayLike<{ transcript?: string }>>
+}
+
 export function getSpeechSupport(): SpeechSupport {
-  const stt = typeof window !== 'undefined' && Boolean((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)
+  const w = window as unknown as { SpeechRecognition?: SpeechRecognitionCtor; webkitSpeechRecognition?: SpeechRecognitionCtor }
+  const stt = typeof window !== 'undefined' && Boolean(w.SpeechRecognition || w.webkitSpeechRecognition)
   const tts = typeof window !== 'undefined' && 'speechSynthesis' in window
   return { stt, tts }
 }
@@ -32,7 +50,8 @@ export function listenOnce({
   timeoutMs?: number
 }): Promise<{ transcript: string }> {
   return new Promise((resolve, reject) => {
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    const w = window as unknown as { SpeechRecognition?: SpeechRecognitionCtor; webkitSpeechRecognition?: SpeechRecognitionCtor }
+    const SR = w.SpeechRecognition || w.webkitSpeechRecognition
     if (!SR) return reject(new Error('SpeechRecognition not supported in this browser'))
 
     const rec = new SR()
@@ -46,7 +65,9 @@ export function listenOnce({
       done = true
       try {
         rec.stop()
-      } catch {}
+      } catch {
+        // ignore
+      }
       fn()
     }
 
@@ -54,14 +75,16 @@ export function listenOnce({
       finish(() => reject(new Error('Listening timed out')))
     }, timeoutMs)
 
-    rec.onresult = (event: any) => {
-      const transcript = event?.results?.[0]?.[0]?.transcript?.toString?.() || ''
+    rec.onresult = (event: unknown) => {
+      const ev = event as SpeechRecognitionResultEventLike
+      const transcript = ev?.results?.[0]?.[0]?.transcript?.toString?.() || ''
       window.clearTimeout(timer)
       finish(() => resolve({ transcript }))
     }
-    rec.onerror = (e: any) => {
+    rec.onerror = (e: unknown) => {
       window.clearTimeout(timer)
-      finish(() => reject(new Error(e?.error || 'Speech recognition error')))
+      const msg = (e as { error?: string } | undefined)?.error || 'Speech recognition error'
+      finish(() => reject(new Error(msg)))
     }
     rec.onend = () => {
       // ignore: timer/handlers resolve or reject
@@ -69,7 +92,7 @@ export function listenOnce({
 
     try {
       rec.start()
-    } catch (e: any) {
+    } catch (e: unknown) {
       window.clearTimeout(timer)
       finish(() => reject(e))
     }

@@ -4,11 +4,11 @@ import { AppShell } from '../ui/AppShell'
 import { Card } from '../ui/Card'
 import { PressableButton } from '../ui/Pressable'
 import { SparkleSticker } from '../ui/stickers'
-import { getWeeklyReport } from '../lib/api'
+import { getWeeklyReport, type WeeklyReport } from '../lib/api'
 
 export function SummaryPage() {
   const [loading, setLoading] = useState(true)
-  const [report, setReport] = useState<any>(null)
+  const [report, setReport] = useState<WeeklyReport | null>(null)
   const [error, setError] = useState('')
   const barsRef = useRef<HTMLDivElement | null>(null)
 
@@ -19,8 +19,8 @@ export function SummaryPage() {
         setError('')
         const r = await getWeeklyReport('demo')
         setReport(r)
-      } catch (e: any) {
-        setError(e?.message || 'Failed to load report')
+      } catch (e: unknown) {
+        setError((e as { message?: string } | undefined)?.message || 'Failed to load report')
       } finally {
         window.setTimeout(() => setLoading(false), 450)
       }
@@ -120,15 +120,21 @@ export function SummaryPage() {
         <p className="text-lg font-extrabold tracking-tight text-ink">Gentle suggestions</p>
         <p className="mt-1 text-sm text-ink/60">Small steps that feel doable.</p>
         <div className="mt-3 grid gap-2">
-          {(report?.recommendations?.length ? report.recommendations : [
-            '10-minute walk after lunch',
-            'Call a friend for 5 minutes',
-            'Play a short prayer / story',
-          ]).slice(0, 3).map((r: string) => (
+          {(
+            report?.recommendations?.length
+              ? report.recommendations
+              : [
+                  '10-minute walk after lunch',
+                  'Call a friend for 5 minutes',
+                  'Play a short prayer / story',
+                ]
+          )
+            .slice(0, 3)
+            .map((r: string) => (
             <PressableButton key={r} size="lg" variant="soft">
               {r}
             </PressableButton>
-          ))}
+            ))}
         </div>
       </Card>
     </AppShell>

@@ -23,3 +23,6 @@ pnpm-debug.log*
 
 extra_stuffs
 
+# Credentials / secrets
+**/*firebase-adminsdk*.json
+

@@ -1,0 +1,5 @@
+# Optional heavy AI deps (install only if you want server-side STT/emotion)
+openai-whisper==20231117
+torch==2.6.0
+torchaudio==2.6.0
+speechbrain==1.0.3
