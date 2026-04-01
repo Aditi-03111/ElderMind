@@ -20,7 +20,7 @@ class Settings:
 
     # LLM providers
     groq_api_key: str | None = _get_env("GROQ_API_KEY")
-    groq_model: str = _get_env("GROQ_MODEL", "llama-3.1-70b-versatile") or "llama-3.1-70b-versatile"
+    groq_model: str = _get_env("GROQ_MODEL", "llama-3.3-70b-versatile") or "llama-3.3-70b-versatile"
 
     gemini_api_key: str | None = _get_env("GEMINI_API_KEY")
     gemini_model: str = _get_env("GEMINI_MODEL", "gemini-1.5-flash") or "gemini-1.5-flash"

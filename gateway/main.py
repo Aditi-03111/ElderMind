@@ -1,29 +1,82 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from .config import settings
 
+logger = logging.getLogger("gateway")
+
+_ALLOWED_ORIGINS = [
+    "http://127.0.0.1:5173",
+    "http://localhost:5173",
+    "http://127.0.0.1:5174",
+    "http://localhost:5174",
+]
+
 
 def _cors_origins() -> list[str]:
-    raw = (settings.cors_allow_origins or "*").strip()
-    if raw == "*":
-        return [
-            "http://127.0.0.1:5173",
-            "http://localhost:5173",
-            "http://127.0.0.1:5174",
-            "http://localhost:5174",
-        ]
+    raw = (settings.cors_allow_origins or "").strip()
+    if not raw or raw == "*":
+        return _ALLOWED_ORIGINS
     return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+# --- Auth middleware -----------------------------------------------------------
+
+_PUBLIC_PREFIXES = ("/health", "/auth/", "/docs", "/openapi.json")
+
+
+class SessionAuthMiddleware(BaseHTTPMiddleware):
+    """Validates session token on protected routes.
+
+    Expects header: Authorization: Bearer <session_id>
+    Validates against the data service's session endpoint.
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+        # Allow public routes and OPTIONS (CORS preflight) through
+        if request.method == "OPTIONS" or any(path.startswith(p) for p in _PUBLIC_PREFIXES):
+            return await call_next(request)
+
+        auth_header = request.headers.get("authorization") or ""
+        session_id = ""
+        if auth_header.lower().startswith("bearer "):
+            session_id = auth_header[7:].strip()
+
+        if not session_id:
+            return JSONResponse(
+                status_code=401,
+                content={"status": "error", "detail": "Missing or invalid Authorization header. Use: Bearer <session_id>"},
+            )
+
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                res = await client.get(f"{settings.data_service_url}/session/{session_id}")
+            if res.is_error:
+                return JSONResponse(
+                    status_code=401,
+                    content={"status": "error", "detail": "Invalid or expired session"},
+                )
+            session_data = res.json()
+            request.state.session = session_data
+        except httpx.RequestError:
+            logger.warning("Could not validate session — data service unreachable, allowing request")
+            request.state.session = None
+
+        return await call_next(request)
 
 
 app = FastAPI(title="ElderMind Gateway", version="0.2.0")
 
+app.add_middleware(SessionAuthMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins(),

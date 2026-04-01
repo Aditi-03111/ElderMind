@@ -8,7 +8,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
 
 
-GATEWAY_URL = os.getenv("GATEWAY_URL", "http://127.0.0.1:8010")
+AI_SERVICE_URL = os.getenv("AI_SERVICE_URL", "http://127.0.0.1:8001")
 DEMO_FAST_SCHEDULE = os.getenv("DEMO_FAST_SCHEDULE", "1") == "1"
 
 CHECKIN_VARIATIONS = [
@@ -30,7 +30,7 @@ async def health():
 
 async def _post_voice(text: str) -> None:
     async with httpx.AsyncClient(timeout=20) as client:
-        await client.post(f"{GATEWAY_URL}/voice", data={"user_id": "demo", "text": text})
+        await client.post(f"{AI_SERVICE_URL}/voice", json={"user_id": "demo", "text": text})
 
 
 async def _poke_checkin():
@@ -54,8 +54,9 @@ async def _bedtime_prompt():
 
 
 async def _weekly_report_ping():
+    data_service_url = os.getenv("DATA_SERVICE_URL", "http://127.0.0.1:8002")
     async with httpx.AsyncClient(timeout=20) as client:
-        await client.get(f"{GATEWAY_URL}/report/weekly/demo")
+        await client.get(f"{data_service_url}/weekly-report/demo")
 
 
 @app.on_event("startup")

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -7,6 +8,8 @@ from typing import Any
 
 import httpx
 from fastapi import FastAPI, Request, UploadFile
+
+logger = logging.getLogger("ai_service")
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -41,19 +44,33 @@ app.mount("/media", StaticFiles(directory=settings.media_dir), name="media")
 
 
 HEALTH_PATTERNS: dict[str, tuple[str, ...]] = {
-    "headache": ("headache", "head", "chakra", "sar dard"),
-    "knee_pain": ("knee", "ghutna", "joint pain"),
-    "chest_pain": ("chest pain", "chest", "seene", "heart pain"),
-    "breathing": ("breath", "saans", "breathing", "suffocation"),
-    "dizziness": ("dizzy", "dizziness", "chakkar"),
-    "nausea": ("nausea", "jee machal", "vomit feel"),
-    "vomiting": ("vomit", "ulthi", "throwing up"),
-    "fever": ("fever", "bukhar", "temperature"),
-    "appetite_low": ("no appetite", "bhook", "not eating"),
-    "sleep_poor": ("sleep", "neend nahi", "could not sleep"),
-    "fatigue": ("tired", "fatigue", "thakaan", "no energy"),
-    "confusion": ("confused", "bhool", "forgetting", "samajh nahi"),
-    "fall": ("fell", "fall", "gir gaya", "gir gayi"),
+    # English + Hindi + Kannada + Tamil + Telugu + Marathi + Gujarati
+    "headache": ("headache", "head", "chakra", "sar dard", "sir dard",
+                 "tale novu", "தலைவலி", "తలనొప్పి", "डोकेदुखी", "માથું દુખે"),
+    "knee_pain": ("knee", "ghutna", "joint pain", "mandi novu", "முட்டி வலி",
+                  "మోకాలు నొప్పి", "गुडघा दुखी", "ઘૂંટણ દુખે"),
+    "chest_pain": ("chest pain", "chest", "seene", "heart pain", "ene novu",
+                   "நெஞ்சு வலி", "ఛాతి నొప్పి", "छाती दुखी", "છાતી દુખે"),
+    "breathing": ("breath", "saans", "breathing", "suffocation", "ushiratagatilla",
+                  "மூச்சு", "ఊపిరి", "श्वास", "શ્વાસ"),
+    "dizziness": ("dizzy", "dizziness", "chakkar", "tale suttu", "தலைச்சுற்று",
+                  "తలతిరుగుతోంది", "चक्कर", "ચક્કર"),
+    "nausea": ("nausea", "jee machal", "vomit feel", "vakarike", "குமட்டல்",
+               "వాంతి", "मळमळ", "ઉબકા"),
+    "vomiting": ("vomit", "ulthi", "throwing up", "vaanti", "வாந்தி",
+                 "వాంతి", "उलटी", "ઉલ્ટી"),
+    "fever": ("fever", "bukhar", "temperature", "jwara", "காய்ச்சல்",
+              "జ్వరం", "ताप", "તાવ"),
+    "appetite_low": ("no appetite", "bhook", "not eating", "oota beda",
+                     "பசி இல்லை", "ఆకలి లేదు", "भूक नाही", "ભૂખ નથી"),
+    "sleep_poor": ("sleep", "neend nahi", "could not sleep", "nidde baralla",
+                   "தூக்கமில்லை", "నిద్ర రాలేదు", "झोप नाही", "ઊંઘ નથી"),
+    "fatigue": ("tired", "fatigue", "thakaan", "no energy", "sust",
+                "thakthu", "களைப்பு", "అలసట", "थकवा", "થાક"),
+    "confusion": ("confused", "bhool", "forgetting", "samajh nahi", "marethu",
+                  "மறந்துவிட்டேன்", "మర్చిపోయాను", "विसरतो", "ભૂલી ગયો"),
+    "fall": ("fell", "fall", "gir gaya", "gir gayi", "biddenu", "bidde",
+             "விழுந்தேன்", "పడిపోయాను", "पडलो", "પડી ગયો"),
 }
 
 LOW_MOOD_TERMS = ("alone", "akela", "lonely", "miss", "sad", "udaas", "kuch achha nahi")
@@ -506,7 +523,7 @@ async def _post_caretaker_alert(user_id: str, reason: str) -> None:
                 },
             )
     except Exception:
-        pass
+        logger.exception("CRITICAL: Failed to send caretaker alert for user=%s reason=%s", user_id, reason)
 
 
 @app.get("/culture/library")
@@ -599,6 +616,7 @@ async def analyze_report(payload: dict[str, Any]):
                 user=user_prompt,
             )
         except Exception:
+            logger.exception("Groq report analysis failed")
             raw = ""
     if not raw and settings.gemini_api_key:
         try:
@@ -609,6 +627,7 @@ async def analyze_report(payload: dict[str, Any]):
                 user=user_prompt,
             )
         except Exception:
+            logger.exception("Gemini report analysis failed")
             raw = ""
 
     parsed = _parse_report_analysis(raw, report_text, profile)
@@ -629,6 +648,7 @@ async def analyze_report(payload: dict[str, Any]):
                 user=extract_user,
             )
         except Exception:
+            logger.exception("Groq medicine extraction failed")
             structured_raw = ""
     if not structured_raw and settings.gemini_api_key:
         try:
@@ -639,6 +659,7 @@ async def analyze_report(payload: dict[str, Any]):
                 user=extract_user,
             )
         except Exception:
+            logger.exception("Gemini medicine extraction failed")
             structured_raw = ""
 
     return {"status": "success", **parsed, "suggested_medicines": _parse_medicine_suggestions(structured_raw, report_text)}
@@ -690,7 +711,7 @@ async def analyze_rppg(request: Request):
                     },
                 )
         except Exception:
-            pass
+            logger.exception("Failed to persist rPPG activity for user=%s", user_id)
 
     return {
         "status": "success",
@@ -812,6 +833,7 @@ async def voice(request: Request):
             wx = await fetch_openweather_summary(api_key=settings.openweather_api_key, lat=lat, lon=lon, lang="en")
             weather_summary = wx.summary
         except Exception:
+            logger.warning("Weather fetch failed for lat=%s lon=%s", lat, lon, exc_info=True)
             weather_summary = "unknown"
 
     if lat is not None and lon is not None:
@@ -826,6 +848,7 @@ async def voice(request: Request):
             festival_today = cal.festival
             tithi_today = cal.tithi
         except Exception:
+            logger.warning("VedAstro tithi fetch failed", exc_info=True)
             festival_today = ""
             tithi_today = ""
 
@@ -872,15 +895,18 @@ async def voice(request: Request):
         try:
             raw = await groq_chat_completion(settings.groq_api_key, model=settings.groq_model, system=system, user=user_text)
         except Exception:
+            logger.exception("Groq LLM call failed for user=%s", user_id)
             raw = ""
 
     if not raw and settings.gemini_api_key:
         try:
             raw = await gemini_generate_text(api_key=settings.gemini_api_key, model=settings.gemini_model, system=system, user=user_text)
         except Exception:
+            logger.exception("Gemini LLM call failed for user=%s", user_id)
             raw = ""
 
     if not raw:
+        logger.warning("All LLM providers failed for user=%s, using fallback reply", user_id)
         raw = _fallback_reply(user_text, profile, mood, health_logs, [], response_lang_code)
 
     parsed = parse_markers(raw)
@@ -938,7 +964,7 @@ async def voice(request: Request):
             for memory in memory_items:
                 await client.post(f"{settings.data_service_url}/memory/{user_id}", json=memory)
     except Exception:
-        pass
+        logger.exception("Failed to persist conversation/alerts/memories for user=%s", user_id)
 
     if alerts:
         await _post_caretaker_alert(user_id, ", ".join(alerts))

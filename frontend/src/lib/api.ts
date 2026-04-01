@@ -219,6 +219,24 @@ export type SupportWorkspace = {
   } | null
 }
 
+function _getSessionId(): string {
+  try {
+    const raw = window.localStorage.getItem('eldermind-session')
+    if (!raw) return ''
+    const session = JSON.parse(raw) as { session_id?: string }
+    return session.session_id || ''
+  } catch {
+    return ''
+  }
+}
+
+function _authHeaders(extra?: Record<string, string>): Record<string, string> {
+  const headers: Record<string, string> = { ...extra }
+  const sid = _getSessionId()
+  if (sid) headers['authorization'] = `Bearer ${sid}`
+  return headers
+}
+
 async function asJson<T>(res: Response): Promise<T> {
   if (!res.ok) {
     let detail = `Request failed: ${res.status}`
@@ -262,14 +280,14 @@ export async function signIn(payload: { identifier: string; password: string }):
 }
 
 export async function getUserProfile(user_id: string): Promise<UserProfile> {
-  const res = await fetch(`${API_BASE}/user/${encodeURIComponent(user_id)}`)
+  const res = await fetch(`${API_BASE}/user/${encodeURIComponent(user_id)}`, { headers: _authHeaders() })
   return ((await asJson<{ user: UserProfile }>(res)).user)
 }
 
 export async function updateUserProfile(user_id: string, payload: Partial<UserProfile>): Promise<UserProfile> {
   const res = await fetch(`${API_BASE}/user/${encodeURIComponent(user_id)}`, {
     method: 'PUT',
-    headers: { 'content-type': 'application/json' },
+    headers: _authHeaders({ 'content-type': 'application/json' }),
     body: JSON.stringify(payload),
   })
   return ((await asJson<{ user: UserProfile }>(res)).user)
@@ -288,7 +306,7 @@ export async function postVoice({
 }): Promise<VoiceResponse> {
   const res = await fetch(`${API_BASE}/voice`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: _authHeaders({ 'content-type': 'application/json' }),
     body: JSON.stringify({ user_id, text, lat, lon }),
   })
   return asJson<VoiceResponse>(res)
@@ -313,12 +331,12 @@ export async function postVoiceAudio({
   if (lat != null) fd.set('lat', String(lat))
   if (lon != null) fd.set('lon', String(lon))
   fd.set('audio', audio, 'audio.webm')
-  const res = await fetch(`${API_BASE}/voice`, { method: 'POST', body: fd })
+  const res = await fetch(`${API_BASE}/voice`, { method: 'POST', headers: _authHeaders(), body: fd })
   return asJson<VoiceResponse>(res)
 }
 
 export async function getConversationHistory(user_id: string, limit = 30): Promise<ConversationItem[]> {
-  const res = await fetch(`${API_BASE}/conversations/${encodeURIComponent(user_id)}?limit=${limit}`)
+  const res = await fetch(`${API_BASE}/conversations/${encodeURIComponent(user_id)}?limit=${limit}`, { headers: _authHeaders() })
   return ((await asJson<{ items: ConversationItem[] }>(res)).items)
 }
 
@@ -337,58 +355,58 @@ export async function addConversationHistory(
 ) {
   const res = await fetch(`${API_BASE}/conversations/${encodeURIComponent(user_id)}`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: _authHeaders({ 'content-type': 'application/json' }),
     body: JSON.stringify(payload),
   })
   return asJson<{ status: string; item: ConversationItem }>(res)
 }
 
 export async function clearConversationHistory(user_id: string) {
-  const res = await fetch(`${API_BASE}/conversations/${encodeURIComponent(user_id)}`, { method: 'DELETE' })
+  const res = await fetch(`${API_BASE}/conversations/${encodeURIComponent(user_id)}`, { method: 'DELETE', headers: _authHeaders() })
   return asJson<{ status: string }>(res)
 }
 
 export async function deleteConversationItem(user_id: string, item_id: string) {
-  const res = await fetch(`${API_BASE}/conversations/${encodeURIComponent(user_id)}/item/${encodeURIComponent(item_id)}`, { method: 'DELETE' })
+  const res = await fetch(`${API_BASE}/conversations/${encodeURIComponent(user_id)}/item/${encodeURIComponent(item_id)}`, { method: 'DELETE', headers: _authHeaders() })
   return asJson<{ status: string }>(res)
 }
 
 export async function deleteConversationDay(user_id: string, day_key: string) {
-  const res = await fetch(`${API_BASE}/conversations/${encodeURIComponent(user_id)}/day/${encodeURIComponent(day_key)}`, { method: 'DELETE' })
+  const res = await fetch(`${API_BASE}/conversations/${encodeURIComponent(user_id)}/day/${encodeURIComponent(day_key)}`, { method: 'DELETE', headers: _authHeaders() })
   return asJson<{ status: string }>(res)
 }
 
 export async function getMemories(user_id: string, limit = 20): Promise<MemoryItem[]> {
-  const res = await fetch(`${API_BASE}/memory/${encodeURIComponent(user_id)}?limit=${limit}`)
+  const res = await fetch(`${API_BASE}/memory/${encodeURIComponent(user_id)}?limit=${limit}`, { headers: _authHeaders() })
   return ((await asJson<{ items: MemoryItem[] }>(res)).items)
 }
 
 export async function clearMemories(user_id: string) {
-  const res = await fetch(`${API_BASE}/memory/${encodeURIComponent(user_id)}`, { method: 'DELETE' })
+  const res = await fetch(`${API_BASE}/memory/${encodeURIComponent(user_id)}`, { method: 'DELETE', headers: _authHeaders() })
   return asJson<{ status: string }>(res)
 }
 
 export async function getAlarms(user_id: string): Promise<AlarmItem[]> {
-  const res = await fetch(`${API_BASE}/alarms/${encodeURIComponent(user_id)}`)
+  const res = await fetch(`${API_BASE}/alarms/${encodeURIComponent(user_id)}`, { headers: _authHeaders() })
   return ((await asJson<{ items: AlarmItem[] }>(res)).items)
 }
 
 export async function createAlarm(user_id: string, payload: { title: string; time_iso: string; label?: string; source?: string }) {
   const res = await fetch(`${API_BASE}/alarms/${encodeURIComponent(user_id)}`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: _authHeaders({ 'content-type': 'application/json' }),
     body: JSON.stringify(payload),
   })
   return ((await asJson<{ status: string; item: AlarmItem }>(res)).item)
 }
 
 export async function deleteAlarm(user_id: string, alarm_id: string) {
-  const res = await fetch(`${API_BASE}/alarms/${encodeURIComponent(user_id)}/${encodeURIComponent(alarm_id)}`, { method: 'DELETE' })
+  const res = await fetch(`${API_BASE}/alarms/${encodeURIComponent(user_id)}/${encodeURIComponent(alarm_id)}`, { method: 'DELETE', headers: _authHeaders() })
   return asJson<{ status: string }>(res)
 }
 
 export async function getReports(user_id: string, limit = 20): Promise<ReportItem[]> {
-  const res = await fetch(`${API_BASE}/reports/${encodeURIComponent(user_id)}?limit=${limit}`)
+  const res = await fetch(`${API_BASE}/reports/${encodeURIComponent(user_id)}?limit=${limit}`, { headers: _authHeaders() })
   return ((await asJson<{ status: string; items: ReportItem[] }>(res)).items)
 }
 
@@ -405,14 +423,14 @@ export async function addReport(
 ): Promise<ReportItem> {
   const res = await fetch(`${API_BASE}/reports/${encodeURIComponent(user_id)}`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: _authHeaders({ 'content-type': 'application/json' }),
     body: JSON.stringify(payload),
   })
   return ((await asJson<{ status: string; item: ReportItem }>(res)).item)
 }
 
 export async function deleteReport(user_id: string, report_id: string) {
-  const res = await fetch(`${API_BASE}/reports/${encodeURIComponent(user_id)}/${encodeURIComponent(report_id)}`, { method: 'DELETE' })
+  const res = await fetch(`${API_BASE}/reports/${encodeURIComponent(user_id)}/${encodeURIComponent(report_id)}`, { method: 'DELETE', headers: _authHeaders() })
   return asJson<{ status: string }>(res)
 }
 
@@ -428,7 +446,7 @@ export async function reviewReportMedicines(
 ) {
   const res = await fetch(`${API_BASE}/reports/${encodeURIComponent(user_id)}/${encodeURIComponent(report_id)}/review`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: _authHeaders({ 'content-type': 'application/json' }),
     body: JSON.stringify(payload),
   })
   return asJson<{ status: string; decision: string; medicines?: MedicineItem[] }>(res)
@@ -441,26 +459,26 @@ export async function shareReportAnalysis(
 ) {
   const res = await fetch(`${API_BASE}/reports/${encodeURIComponent(user_id)}/${encodeURIComponent(report_id)}/share`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: _authHeaders({ 'content-type': 'application/json' }),
     body: JSON.stringify(payload),
   })
   return asJson<{ status: string; delivery: { message: string; alerts_sent_to: string[] } }>(res)
 }
 
 export async function getAudit(user_id: string, limit = 40): Promise<AuditItem[]> {
-  const res = await fetch(`${API_BASE}/audit/${encodeURIComponent(user_id)}?limit=${limit}`)
+  const res = await fetch(`${API_BASE}/audit/${encodeURIComponent(user_id)}?limit=${limit}`, { headers: _authHeaders() })
   return ((await asJson<{ status: string; items: AuditItem[] }>(res)).items)
 }
 
 export async function getMedicines(user_id: string): Promise<{ medicines: MedicineItem[]; logs: MedicineLog[] }> {
-  const res = await fetch(`${API_BASE}/medicine/${encodeURIComponent(user_id)}`)
+  const res = await fetch(`${API_BASE}/medicine/${encodeURIComponent(user_id)}`, { headers: _authHeaders() })
   return asJson<{ medicines: MedicineItem[]; logs: MedicineLog[] }>(res)
 }
 
 export async function saveMedicines(user_id: string, medicines: MedicineItem[]) {
   const res = await fetch(`${API_BASE}/medicine/${encodeURIComponent(user_id)}`, {
     method: 'PUT',
-    headers: { 'content-type': 'application/json' },
+    headers: _authHeaders({ 'content-type': 'application/json' }),
     body: JSON.stringify({ medicines, actor_role: 'family_manager' }),
   })
   return ((await asJson<{ status: string; medicines: MedicineItem[] }>(res)).medicines)
@@ -469,6 +487,7 @@ export async function saveMedicines(user_id: string, medicines: MedicineItem[]) 
 export async function syncMedicineReminders(user_id: string) {
   const res = await fetch(`${API_BASE}/medicine/${encodeURIComponent(user_id)}/sync-reminders`, {
     method: 'POST',
+    headers: _authHeaders(),
   })
   return asJson<{ status: string; items: AlarmItem[] }>(res)
 }
@@ -486,37 +505,37 @@ export async function confirmMedicine({
 }) {
   const res = await fetch(`${API_BASE}/medicine/${encodeURIComponent(med_id)}/confirm`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: _authHeaders({ 'content-type': 'application/json' }),
     body: JSON.stringify({ user_id, status, scheduled_time }),
   })
   return asJson<{ status: string; logged: MedicineLog }>(res)
 }
 
 export async function getWeeklyReport(user_id: string): Promise<WeeklyReport> {
-  const res = await fetch(`${API_BASE}/report/weekly/${encodeURIComponent(user_id)}`)
+  const res = await fetch(`${API_BASE}/report/weekly/${encodeURIComponent(user_id)}`, { headers: _authHeaders() })
   return asJson<WeeklyReport>(res)
 }
 
 export async function getDailyCulture(user_id: string): Promise<{ calendar: DailyCulture; stories: CulturalItem[] }> {
-  const res = await fetch(`${API_BASE}/culture/daily/${encodeURIComponent(user_id)}`)
+  const res = await fetch(`${API_BASE}/culture/daily/${encodeURIComponent(user_id)}`, { headers: _authHeaders() })
   return asJson<{ status: string; calendar: DailyCulture; stories: CulturalItem[] }>(res)
 }
 
 export async function getCultureLibrary(query = '', category = ''): Promise<CulturalItem[]> {
   const url = `${API_BASE}/culture/library?q=${encodeURIComponent(query)}&category=${encodeURIComponent(category)}`
-  const res = await fetch(url)
+  const res = await fetch(url, { headers: _authHeaders() })
   return ((await asJson<{ status: string; items: CulturalItem[] }>(res)).items)
 }
 
 export async function getActivity(user_id: string): Promise<ActivitySummary> {
-  const res = await fetch(`${API_BASE}/activity/${encodeURIComponent(user_id)}`)
+  const res = await fetch(`${API_BASE}/activity/${encodeURIComponent(user_id)}`, { headers: _authHeaders() })
   return ((await asJson<{ activity: ActivitySummary }>(res)).activity)
 }
 
 export async function updateActivityStatus(user_id: string, payload: Record<string, unknown>): Promise<ActivitySummary> {
   const res = await fetch(`${API_BASE}/activity/${encodeURIComponent(user_id)}/status`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: _authHeaders({ 'content-type': 'application/json' }),
     body: JSON.stringify(payload),
   })
   return ((await asJson<{ activity: ActivitySummary }>(res)).activity)
@@ -526,7 +545,7 @@ export async function analyzeRppgVideo(user_id: string, video: File | Blob): Pro
   const fd = new FormData()
   fd.set('user_id', user_id)
   fd.set('video', video, video instanceof File ? video.name : 'face-video.webm')
-  const res = await fetch(`${API_BASE}/rppg/analyze`, { method: 'POST', body: fd })
+  const res = await fetch(`${API_BASE}/rppg/analyze`, { method: 'POST', headers: _authHeaders(), body: fd })
   return asJson<RppgAnalysis>(res)
 }
 
@@ -543,7 +562,7 @@ export async function sendSos({
 }) {
   const res = await fetch(`${API_BASE}/sos`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: _authHeaders({ 'content-type': 'application/json' }),
     body: JSON.stringify({ user_id, reason, location, severity }),
   })
   return asJson<{
@@ -566,14 +585,14 @@ export async function callContact({
 }) {
   const res = await fetch(`${API_BASE}/call`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: _authHeaders({ 'content-type': 'application/json' }),
     body: JSON.stringify({ user_id, to, label }),
   })
   return asJson<{ status: string; mode: string; target: string; label: string }>(res)
 }
 
 export async function getDashboard(caretaker_id: string) {
-  const res = await fetch(`${API_BASE}/dashboard/${encodeURIComponent(caretaker_id)}`)
+  const res = await fetch(`${API_BASE}/dashboard/${encodeURIComponent(caretaker_id)}`, { headers: _authHeaders() })
   return asJson<{
     caregiver_id: string
     user: UserProfile
@@ -587,7 +606,7 @@ export async function getDashboard(caretaker_id: string) {
 
 export async function getSupportWorkspace(account_id: string, active_user_id = ''): Promise<SupportWorkspace> {
   const suffix = active_user_id ? `?active_user_id=${encodeURIComponent(active_user_id)}` : ''
-  const res = await fetch(`${API_BASE}/support/account/${encodeURIComponent(account_id)}${suffix}`)
+  const res = await fetch(`${API_BASE}/support/account/${encodeURIComponent(account_id)}${suffix}`, { headers: _authHeaders() })
   const payload = await asJson<{ status: string } & SupportWorkspace>(res)
   return {
     account: payload.account,
@@ -602,7 +621,7 @@ export async function updateSupportAccount(
 ) {
   const res = await fetch(`${API_BASE}/support/account/${encodeURIComponent(account_id)}`, {
     method: 'PUT',
-    headers: { 'content-type': 'application/json' },
+    headers: _authHeaders({ 'content-type': 'application/json' }),
     body: JSON.stringify(payload),
   })
   return asJson<{ status: string; account: SupportAccount }>(res)
@@ -628,7 +647,7 @@ export async function createManagedElder(
 ): Promise<{ user: UserProfile; login: { user_id: string; account_id?: string } }> {
   const res = await fetch(`${API_BASE}/support/account/${encodeURIComponent(account_id)}/elders`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: _authHeaders({ 'content-type': 'application/json' }),
     body: JSON.stringify(payload),
   })
   const data = await asJson<{ status: string; user: UserProfile; login: { user_id: string; account_id?: string } }>(res)
@@ -648,7 +667,7 @@ export async function createCaretakerLogin(
 ) {
   const res = await fetch(`${API_BASE}/support/account/${encodeURIComponent(account_id)}/caretakers`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: _authHeaders({ 'content-type': 'application/json' }),
     body: JSON.stringify(payload),
   })
   return asJson<{ status: string; account: SupportAccount; user: UserProfile }>(res)
@@ -657,7 +676,7 @@ export async function createCaretakerLogin(
 export async function resetParentPassword(account_id: string, user_id: string, payload: { password: string }) {
   const res = await fetch(`${API_BASE}/support/account/${encodeURIComponent(account_id)}/elders/${encodeURIComponent(user_id)}/reset-password`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: _authHeaders({ 'content-type': 'application/json' }),
     body: JSON.stringify(payload),
   })
   return asJson<{ status: string }>(res)
@@ -670,7 +689,7 @@ export async function updateCaretakerLogin(
 ) {
   const res = await fetch(`${API_BASE}/support/account/${encodeURIComponent(account_id)}/caretakers/${encodeURIComponent(contact_id)}`, {
     method: 'PUT',
-    headers: { 'content-type': 'application/json' },
+    headers: _authHeaders({ 'content-type': 'application/json' }),
     body: JSON.stringify(payload),
   })
   return asJson<{ status: string }>(res)
@@ -679,7 +698,7 @@ export async function updateCaretakerLogin(
 export async function deleteCaretakerLogin(account_id: string, contact_id: string, user_id: string) {
   const res = await fetch(
     `${API_BASE}/support/account/${encodeURIComponent(account_id)}/caretakers/${encodeURIComponent(contact_id)}?user_id=${encodeURIComponent(user_id)}`,
-    { method: 'DELETE' },
+    { method: 'DELETE', headers: _authHeaders() },
   )
   return asJson<{ status: string; deleted_account: boolean }>(res)
 }
@@ -687,7 +706,7 @@ export async function deleteCaretakerLogin(account_id: string, contact_id: strin
 export async function testWhatsApp(payload: { user_id?: string; phone?: string; message?: string }) {
   const res = await fetch(`${API_BASE}/whatsapp/test`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: _authHeaders({ 'content-type': 'application/json' }),
     body: JSON.stringify(payload),
   })
   return asJson<{ status: string; configured: boolean; target: string; result: string; message: string }>(res)
@@ -696,7 +715,7 @@ export async function testWhatsApp(payload: { user_id?: string; phone?: string; 
 export async function analyzeReport(payload: { user_id?: string; file_name?: string; report_text: string }) {
   const res = await fetch(`${API_BASE}/report/analyze`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: _authHeaders({ 'content-type': 'application/json' }),
     body: JSON.stringify(payload),
   })
   return asJson<{ status: string; summary: string; advice: string; suggested_medicines: Array<Omit<MedicineItem, 'id'> & { id?: string }> }>(res)

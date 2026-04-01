@@ -39,7 +39,7 @@ class AISettings:
     cors_allow_origins: str = _env("CORS_ALLOW_ORIGINS", "*") or "*"
 
     groq_api_key: str | None = _env("GROQ_API_KEY")
-    groq_model: str = _env("GROQ_MODEL", "llama-3.1-70b-versatile") or "llama-3.1-70b-versatile"
+    groq_model: str = _env("GROQ_MODEL", "llama-3.3-70b-versatile") or "llama-3.3-70b-versatile"
 
     tavily_api_key: str | None = _env("TAVILY_API_KEY")
 

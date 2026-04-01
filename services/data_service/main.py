@@ -7,9 +7,60 @@ from typing import Any
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field, field_validator
 
 from .config import settings
 from .store import LocalStore, MongoStore, Store, _password_hash, _slugify
+
+
+# --- Pydantic request models for input validation ---
+
+class SignupRequest(BaseModel):
+    email: str = Field(..., min_length=3, max_length=200)
+    password: str = Field(..., min_length=4, max_length=200)
+    name: str = Field(..., min_length=1, max_length=100)
+    role: str = Field(default="elder", max_length=20)
+    phone: str = Field(default="", max_length=20)
+    relation: str = Field(default="Support", max_length=50)
+    linked_user_id: str = Field(default="", max_length=100)
+    user_id: str = Field(default="", max_length=100)
+    support_id: str = Field(default="", max_length=100)
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        v = v.strip().lower()
+        if "@" not in v:
+            raise ValueError("Invalid email address")
+        return v
+
+
+class LoginRequest(BaseModel):
+    identifier: str = Field(default="", max_length=200)
+    email: str = Field(default="", max_length=200)
+    password: str = Field(..., min_length=1, max_length=200)
+
+
+class UserUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, max_length=100)
+    age: int | None = Field(default=None, ge=0, le=150)
+    language: str | None = Field(default=None, max_length=50)
+    region: str | None = Field(default=None, max_length=100)
+    city: str | None = Field(default=None, max_length=100)
+    origin: str | None = Field(default=None, max_length=200)
+    wake_time: str | None = Field(default=None, max_length=10)
+    sleep_time: str | None = Field(default=None, max_length=10)
+    caretaker_name: str | None = Field(default=None, max_length=100)
+    caretaker_phone: str | None = Field(default=None, max_length=20)
+    caregiver_name: str | None = Field(default=None, max_length=100)
+    caregiver_phone: str | None = Field(default=None, max_length=20)
+    phone: str | None = Field(default=None, max_length=20)
+    healthcare_phone: str | None = Field(default=None, max_length=20)
+    conditions: list[str] | None = None
+    allergies: list[str] | None = None
+    preferences: list[str] | None = None
+    family_contacts: list[dict[str, Any]] | None = None
+    settings: dict[str, Any] | None = None
 
 
 def _cors_origins() -> list[str]:
@@ -364,22 +415,19 @@ async def create_session(payload: dict[str, Any]):
 
 
 @app.post("/auth/signup")
-async def signup(payload: dict[str, Any]):
-    email = str(payload.get("email") or "").strip().lower()
-    password = str(payload.get("password") or "")
-    role = str(payload.get("role") or "elder").strip().lower()
-    name = str(payload.get("name") or "").strip()
-
-    if not email or not password or not name:
-        raise HTTPException(status_code=400, detail="Name, email, and password are required")
+async def signup(payload: SignupRequest):
+    email = payload.email
+    password = payload.password
+    role = payload.role.strip().lower()
+    name = payload.name.strip()
     if store.find_account_by_email(email):
         raise HTTPException(status_code=409, detail="An account with this email already exists")
 
     if role in {"support", "caretaker", "caregiver"}:
-        linked_user_id = str(payload.get("linked_user_id") or payload.get("user_id") or "").strip().lower()
-        relation = str(payload.get("relation") or "Support").strip() or "Support"
-        phone = str(payload.get("phone") or "").strip()
-        contact_id = str(payload.get("support_id") or email.split("@")[0] or name).strip().lower()
+        linked_user_id = (payload.linked_user_id or payload.user_id or "").strip().lower()
+        relation = (payload.relation or "Support").strip() or "Support"
+        phone = (payload.phone or "").strip()
+        contact_id = (payload.support_id or email.split("@")[0] or name).strip().lower()
         linked_user = None
         if linked_user_id:
             if not _user_exists(linked_user_id):
@@ -438,11 +486,11 @@ async def signup(payload: dict[str, Any]):
 
 
 @app.post("/auth/login")
-async def login(payload: dict[str, Any]):
-    identifier = str(payload.get("identifier") or payload.get("email") or "").strip().lower()
-    password = str(payload.get("password") or "")
-    if not identifier or not password:
-        raise HTTPException(status_code=400, detail="Email or parent user id, plus password, are required")
+async def login(payload: LoginRequest):
+    identifier = (payload.identifier or payload.email or "").strip().lower()
+    password = payload.password
+    if not identifier:
+        raise HTTPException(status_code=400, detail="Email or parent user id is required")
 
     account = store.login_account(identifier, password)
     if not account:
@@ -488,8 +536,8 @@ async def get_user(user_id: str):
 
 
 @app.put("/user/{user_id}")
-async def update_user(user_id: str, payload: dict[str, Any]):
-    return {"status": "success", "user": store.upsert_user(user_id, payload)}
+async def update_user(user_id: str, payload: UserUpdateRequest):
+    return {"status": "success", "user": store.upsert_user(user_id, payload.model_dump(exclude_none=True))}
 
 
 @app.get("/support/account/{account_id}")

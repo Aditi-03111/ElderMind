@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import hashlib
 import re
+import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -21,6 +22,18 @@ def _slugify(value: str | None, fallback: str) -> str:
     return cleaned or fallback
 
 
+_file_locks: dict[str, threading.Lock] = {}
+_file_locks_guard = threading.Lock()
+
+
+def _get_file_lock(path: Path) -> threading.Lock:
+    key = str(path.resolve())
+    with _file_locks_guard:
+        if key not in _file_locks:
+            _file_locks[key] = threading.Lock()
+        return _file_locks[key]
+
+
 def _load(path: Path, default: Any) -> Any:
     if not path.exists():
         return default
@@ -35,6 +48,16 @@ def _save(path: Path, data: Any) -> None:
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def _locked_update(path: Path, default: Any, updater):
+    """Read-modify-write with a per-file lock to prevent race conditions."""
+    lock = _get_file_lock(path)
+    with lock:
+        data = _load(path, default)
+        result = updater(data)
+        _save(path, data)
+        return result
+
+
 def _merge_dict(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
     out = dict(base)
     for key, value in patch.items():
@@ -45,7 +68,21 @@ def _merge_dict(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
 
 
 def _password_hash(password: str) -> str:
-    return hashlib.sha256(password.encode("utf-8")).hexdigest()
+    import bcrypt
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+
+def _password_verify(password: str, hashed: str) -> bool:
+    import bcrypt
+    # Support legacy SHA-256 hashes during migration
+    if len(hashed) == 64 and all(c in "0123456789abcdef" for c in hashed):
+        if hashlib.sha256(password.encode("utf-8")).hexdigest() == hashed:
+            return True
+        return False
+    try:
+        return bcrypt.checkpw(password.encode("utf-8"), hashed.encode("utf-8"))
+    except Exception:
+        return False
 
 
 def _normalize_user(user: dict[str, Any]) -> dict[str, Any]:
@@ -217,13 +254,16 @@ class LocalStore:
         return None
 
     def upsert_user(self, user_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-        users = _load(self.paths.users, {})
-        existing = users.get(user_id) or {"user_id": user_id}
-        merged = _normalize_user(_merge_dict(existing, payload))
-        merged["user_id"] = user_id
-        users[user_id] = merged
-        _save(self.paths.users, users)
-        return merged
+        result = {}
+        def _update(users):
+            nonlocal result
+            existing = users.get(user_id) or {"user_id": user_id}
+            merged = _normalize_user(_merge_dict(existing, payload))
+            merged["user_id"] = user_id
+            users[user_id] = merged
+            result = merged
+        _locked_update(self.paths.users, {}, _update)
+        return result
 
     def create_session(self, payload: dict[str, Any]) -> dict[str, Any]:
         role = str(payload.get("role") or "elder").lower()
@@ -337,8 +377,11 @@ class LocalStore:
             account = self.find_account_by_user_id(identifier, role="elder")
         if not account:
             return None
-        if account.get("password_hash") != _password_hash(password):
+        if not _password_verify(password, str(account.get("password_hash") or "")):
             return None
+        # Rehash legacy SHA-256 to bcrypt on successful login
+        if len(str(account.get("password_hash") or "")) == 64:
+            self.update_account(str(account["account_id"]), {"password_hash": _password_hash(password)})
         return account
 
     def get_account(self, account_id: str) -> dict[str, Any] | None:
@@ -382,11 +425,11 @@ class LocalStore:
         return meds
 
     def append_med_log(self, user_id: str, item: dict[str, Any]) -> dict[str, Any]:
-        data = _load(self.paths.med_logs, {"demo": []})
-        data.setdefault(user_id, [])
         record = {"id": item.get("id") or str(uuid4()), **item}
-        data[user_id].append(record)
-        _save(self.paths.med_logs, data)
+        def _update(data):
+            data.setdefault(user_id, [])
+            data[user_id].append(record)
+        _locked_update(self.paths.med_logs, {"demo": []}, _update)
         return record
 
     def list_med_logs(self, user_id: str, limit: int = 30) -> list[dict[str, Any]]:
@@ -394,11 +437,11 @@ class LocalStore:
         return (data.get(user_id, []) or [])[-limit:]
 
     def append_conversation(self, user_id: str, item: dict[str, Any]) -> dict[str, Any]:
-        data = _load(self.paths.conv, {"demo": []})
-        data.setdefault(user_id, [])
         record = {"id": item.get("id") or str(uuid4()), **item}
-        data[user_id].append(record)
-        _save(self.paths.conv, data)
+        def _update(data):
+            data.setdefault(user_id, [])
+            data[user_id].append(record)
+        _locked_update(self.paths.conv, {"demo": []}, _update)
         return record
 
     def list_conversations(self, user_id: str, limit: int = 20) -> list[dict[str, Any]]:
@@ -425,11 +468,11 @@ class LocalStore:
         _save(self.paths.conv, data)
 
     def append_alert(self, user_id: str, item: dict[str, Any]) -> dict[str, Any]:
-        data = _load(self.paths.alerts, {"demo": []})
-        data.setdefault(user_id, [])
         record = {"id": item.get("id") or str(uuid4()), **item}
-        data[user_id].append(record)
-        _save(self.paths.alerts, data)
+        def _update(data):
+            data.setdefault(user_id, [])
+            data[user_id].append(record)
+        _locked_update(self.paths.alerts, {"demo": []}, _update)
         return record
 
     def list_alerts(self, user_id: str, limit: int = 20) -> list[dict[str, Any]]:
@@ -779,8 +822,11 @@ class MongoStore:
             account = self.find_account_by_user_id(identifier, role="elder")
         if not account:
             return None
-        if account.get("password_hash") != _password_hash(password):
+        if not _password_verify(password, str(account.get("password_hash") or "")):
             return None
+        # Rehash legacy SHA-256 to bcrypt on successful login
+        if len(str(account.get("password_hash") or "")) == 64:
+            self.update_account(str(account["account_id"]), {"password_hash": _password_hash(password)})
         return account
 
     def get_account(self, account_id: str) -> dict[str, Any] | None:

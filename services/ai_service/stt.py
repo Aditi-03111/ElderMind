@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
 import httpx
+
+logger = logging.getLogger("ai_service.stt")
 
 
 @dataclass(frozen=True)
@@ -45,6 +48,7 @@ async def _transcribe_with_whisper(audio_bytes: bytes, *, filename: str | None =
     except Exception as e:  # pragma: no cover
         raise RuntimeError("Whisper STT not installed") from e
 
+    import asyncio
     import tempfile
     from pathlib import Path
 
@@ -53,8 +57,11 @@ async def _transcribe_with_whisper(audio_bytes: bytes, *, filename: str | None =
         f.write(audio_bytes)
         tmp = f.name
 
-    model = whisper.load_model("base")
-    result = model.transcribe(tmp)
+    def _run_whisper() -> dict:
+        model = whisper.load_model("base")
+        return model.transcribe(tmp)
+
+    result = await asyncio.to_thread(_run_whisper)
     text = (result.get("text") or "").strip()
     lang = result.get("language")
     return STTResult(text=text, language=lang)
@@ -76,5 +83,5 @@ async def transcribe_audio_bytes(
                 model_id=elevenlabs_model_id,
             )
         except Exception:
-            pass
+            logger.exception("ElevenLabs STT failed, falling back to Whisper")
     return await _transcribe_with_whisper(audio_bytes, filename=filename)
