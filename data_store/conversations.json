@@ -925,6 +925,291 @@
         "festival": "",
         "tithi": ""
       }
+    },
+    {
+      "id": "10d16a68-7112-4eaf-bbd8-b7c65fe78934",
+      "ts": "2026-04-01T18:35:39.559126+00:00",
+      "text_input": "Aaj mood kaisa hai?",
+      "ai_response": "Ramesh, I am listening. Please speak slowly.",
+      "mood": "okay",
+      "emotion": "neutral",
+      "health_logs": [],
+      "mood_logs": [
+        "okay"
+      ],
+      "alerts": [],
+      "source": "voice",
+      "context": {
+        "weather": "unknown",
+        "festival": "",
+        "tithi": ""
+      }
+    },
+    {
+      "id": "885b0a6c-32a7-4a22-a263-21e2e690779e",
+      "ts": "2026-04-01T18:37:37.559820+00:00",
+      "text_input": "Aaj mood kaisa hai?",
+      "ai_response": "Ramesh, I am listening. Please speak slowly.",
+      "mood": "okay",
+      "emotion": "neutral",
+      "health_logs": [],
+      "mood_logs": [
+        "okay"
+      ],
+      "alerts": [],
+      "source": "voice",
+      "context": {
+        "weather": "unknown",
+        "festival": "",
+        "tithi": ""
+      }
+    },
+    {
+      "id": "90933a2f-de02-4b1e-bd0a-82f0606e767c",
+      "ts": "2026-04-01T18:38:37.437812+00:00",
+      "text_input": "Ek sundar doha sunna chahenge?",
+      "ai_response": "Ramesh, काळजी करू नका. आपण हळूहळू पाहू.",
+      "mood": "anxious",
+      "emotion": "neutral",
+      "health_logs": [],
+      "mood_logs": [
+        "anxious"
+      ],
+      "alerts": [],
+      "source": "voice",
+      "context": {
+        "weather": "unknown",
+        "festival": "",
+        "tithi": ""
+      }
+    },
+    {
+      "id": "3de94864-b74d-43be-b073-4043dab4eb29",
+      "ts": "2026-04-01T18:39:37.137445+00:00",
+      "text_input": "Thodi der aaraam kiya kya?",
+      "ai_response": "Ramesh ji, main sun raha hoon. Aap aaraam se boliye.",
+      "mood": "okay",
+      "emotion": "neutral",
+      "health_logs": [],
+      "mood_logs": [
+        "okay"
+      ],
+      "alerts": [],
+      "source": "voice",
+      "context": {
+        "weather": "unknown",
+        "festival": "",
+        "tithi": ""
+      }
+    },
+    {
+      "id": "4e7651b2-8847-4bb5-96ae-75fe94e29517",
+      "ts": "2026-04-01T18:41:37.149696+00:00",
+      "text_input": "Khaana kha liya?",
+      "ai_response": "Ramesh ji, main sun raha hoon. Aap aaraam se boliye.",
+      "mood": "okay",
+      "emotion": "neutral",
+      "health_logs": [],
+      "mood_logs": [
+        "okay"
+      ],
+      "alerts": [],
+      "source": "voice",
+      "context": {
+        "weather": "unknown",
+        "festival": "",
+        "tithi": ""
+      }
+    },
+    {
+      "id": "9cca1964-f502-4db6-a820-665640f166a8",
+      "ts": "2026-04-01T18:43:37.534992+00:00",
+      "text_input": "Aaj mood kaisa hai?",
+      "ai_response": "Ramesh, I am listening. Please speak slowly.",
+      "mood": "okay",
+      "emotion": "neutral",
+      "health_logs": [],
+      "mood_logs": [
+        "okay"
+      ],
+      "alerts": [],
+      "source": "voice",
+      "context": {
+        "weather": "unknown",
+        "festival": "",
+        "tithi": ""
+      }
+    },
+    {
+      "id": "3d549537-ba53-4d88-bb59-4a60a78127e8",
+      "ts": "2026-04-01T18:43:38.111936+00:00",
+      "text_input": "Ek sundar doha sunna chahenge?",
+      "ai_response": "Ramesh, काळजी करू नका. आपण हळूहळू पाहू.",
+      "mood": "anxious",
+      "emotion": "neutral",
+      "health_logs": [],
+      "mood_logs": [
+        "anxious"
+      ],
+      "alerts": [],
+      "source": "voice",
+      "context": {
+        "weather": "unknown",
+        "festival": "",
+        "tithi": ""
+      }
+    },
+    {
+      "id": "ec341f48-c068-4c3f-809f-1c951102873d",
+      "ts": "2026-04-01T18:44:37.385645+00:00",
+      "text_input": "Good morning. Kaise neend aayi? Aaj ka din shanti se shuru karte hain.",
+      "ai_response": "Ramesh ji, main sun raha hoon. Aap aaraam se boliye.",
+      "mood": "okay",
+      "emotion": "neutral",
+      "health_logs": [],
+      "mood_logs": [
+        "okay"
+      ],
+      "alerts": [],
+      "source": "voice",
+      "context": {
+        "weather": "unknown",
+        "festival": "",
+        "tithi": ""
+      }
+    },
+    {
+      "id": "2715aa44-aa5c-41d7-8f41-9e64841d2cff",
+      "ts": "2026-04-01T18:45:37.099207+00:00",
+      "text_input": "Thodi der aaraam kiya kya?",
+      "ai_response": "Ramesh ji, main sun raha hoon. Aap aaraam se boliye.",
+      "mood": "okay",
+      "emotion": "neutral",
+      "health_logs": [],
+      "mood_logs": [
+        "okay"
+      ],
+      "alerts": [],
+      "source": "voice",
+      "context": {
+        "weather": "unknown",
+        "festival": "",
+        "tithi": ""
+      }
+    },
+    {
+      "id": "e1c96470-f23e-4526-8b7e-ae8e06d715e8",
+      "ts": "2026-04-01T18:46:37.439779+00:00",
+      "text_input": "Shaam ho gayi. Aaj ka din kaisa raha?",
+      "ai_response": "Ramesh, I am listening. Please speak slowly.",
+      "mood": "okay",
+      "emotion": "neutral",
+      "health_logs": [],
+      "mood_logs": [
+        "okay"
+      ],
+      "alerts": [],
+      "source": "voice",
+      "context": {
+        "weather": "unknown",
+        "festival": "",
+        "tithi": ""
+      }
+    },
+    {
+      "id": "903e69a1-67ef-4f62-bfbf-c50a13aae92c",
+      "ts": "2026-04-01T18:47:37.176301+00:00",
+      "text_input": "Thodi der aaraam kiya kya?",
+      "ai_response": "Ramesh ji, main sun raha hoon. Aap aaraam se boliye.",
+      "mood": "okay",
+      "emotion": "neutral",
+      "health_logs": [],
+      "mood_logs": [
+        "okay"
+      ],
+      "alerts": [],
+      "source": "voice",
+      "context": {
+        "weather": "unknown",
+        "festival": "",
+        "tithi": ""
+      }
+    },
+    {
+      "id": "104459f9-5c02-46c6-938d-a94717d5d2e1",
+      "ts": "2026-04-01T18:48:37.414300+00:00",
+      "text_input": "Ek sundar doha sunna chahenge?",
+      "ai_response": "Ramesh, काळजी करू नका. आपण हळूहळू पाहू.",
+      "mood": "anxious",
+      "emotion": "neutral",
+      "health_logs": [],
+      "mood_logs": [
+        "anxious"
+      ],
+      "alerts": [],
+      "source": "voice",
+      "context": {
+        "weather": "unknown",
+        "festival": "",
+        "tithi": ""
+      }
+    },
+    {
+      "id": "d9f9fc48-7fcf-483f-adea-b2bc22f98b08",
+      "ts": "2026-04-01T18:49:37.683776+00:00",
+      "text_input": "Paani to pee liya?",
+      "ai_response": "Ramesh ji, main sun raha hoon. Aap aaraam se boliye.",
+      "mood": "okay",
+      "emotion": "neutral",
+      "health_logs": [],
+      "mood_logs": [
+        "okay"
+      ],
+      "alerts": [],
+      "source": "voice",
+      "context": {
+        "weather": "unknown",
+        "festival": "",
+        "tithi": ""
+      }
+    },
+    {
+      "id": "f258b66f-923e-44c9-bf58-e3b4b80aec97",
+      "ts": "2026-04-01T18:50:37.743390+00:00",
+      "text_input": "Sone ka waqt ho gaya. Koi chhoti si prarthana sunenge?",
+      "ai_response": "Ramesh, I am listening. Please speak slowly.",
+      "mood": "okay",
+      "emotion": "neutral",
+      "health_logs": [],
+      "mood_logs": [
+        "okay"
+      ],
+      "alerts": [],
+      "source": "voice",
+      "context": {
+        "weather": "unknown",
+        "festival": "",
+        "tithi": ""
+      }
+    },
+    {
+      "id": "ff0d1fa1-2c0f-433f-a115-8a7d58fc3554",
+      "ts": "2026-04-01T18:51:37.839113+00:00",
+      "text_input": "Khaana kha liya?",
+      "ai_response": "Ramesh ji, main sun raha hoon. Aap aaraam se boliye.",
+      "mood": "okay",
+      "emotion": "neutral",
+      "health_logs": [],
+      "mood_logs": [
+        "okay"
+      ],
+      "alerts": [],
+      "source": "voice",
+      "context": {
+        "weather": "unknown",
+        "festival": "",
+        "tithi": ""
+      }
     }
   ],
   "lang-smoke": [

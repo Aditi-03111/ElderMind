@@ -10,5 +10,31 @@
     "phone": "+91-9449398356",
     "managed_user_ids": [],
     "created_at": "2026-04-01T17:19:17.492339+00:00"
+  },
+  "f728901a-9409-460d-890c-40d39581cd17": {
+    "account_id": "f728901a-9409-460d-890c-40d39581cd17",
+    "email": "5434223prajwaln@gmail.com",
+    "password_hash": "881ff091a808d041179aa09ffd3c55bf592e2d3f57abb2393dc7688ff45033aa",
+    "role": "support",
+    "user_id": "",
+    "name": "Prajwal N R",
+    "relation": "Son",
+    "phone": "9449398356",
+    "managed_user_ids": [
+      "rohit123"
+    ],
+    "created_at": "2026-04-01T18:33:40.524751+00:00"
+  },
+  "c00fbdde-7374-44b3-8487-bbb9f293aad0": {
+    "account_id": "c00fbdde-7374-44b3-8487-bbb9f293aad0",
+    "email": "ro@gmail.com",
+    "password_hash": "881ff091a808d041179aa09ffd3c55bf592e2d3f57abb2393dc7688ff45033aa",
+    "role": "elder",
+    "user_id": "rohit123",
+    "name": "Rohit",
+    "relation": "",
+    "phone": "8431851328",
+    "managed_user_ids": [],
+    "created_at": "2026-04-01T18:44:08.227706+00:00"
   }
 }

@@ -25,5 +25,32 @@
     "display_name": "Bhumi Family",
     "email": "bhumi.family9449@eldermind.app",
     "created_at": "2026-04-01T17:50:26.469137+00:00"
+  },
+  "27028dba-eda1-48f5-a70b-ec0aae794716": {
+    "session_id": "27028dba-eda1-48f5-a70b-ec0aae794716",
+    "role": "support",
+    "user_id": "",
+    "caregiver_id": "f728901a-9409-460d-890c-40d39581cd17",
+    "display_name": "Prajwal N R",
+    "email": "5434223prajwaln@gmail.com",
+    "created_at": "2026-04-01T18:33:40.525308+00:00"
+  },
+  "9ddf6ba9-b1b1-45d8-b752-353ee3a426a9": {
+    "session_id": "9ddf6ba9-b1b1-45d8-b752-353ee3a426a9",
+    "role": "elder",
+    "user_id": "rohit123",
+    "caregiver_id": "prajwal-n-r",
+    "display_name": "Rohit",
+    "email": "ro@gmail.com",
+    "created_at": "2026-04-01T18:45:31.478266+00:00"
+  },
+  "20c26d5f-9573-4425-aa74-f6706ce355f5": {
+    "session_id": "20c26d5f-9573-4425-aa74-f6706ce355f5",
+    "role": "elder",
+    "user_id": "rohit123",
+    "caregiver_id": "prajwal-n-r",
+    "display_name": "Rohit",
+    "email": "ro@gmail.com",
+    "created_at": "2026-04-01T18:47:38.174081+00:00"
   }
 }
