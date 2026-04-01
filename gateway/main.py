@@ -447,6 +447,11 @@ async def weekly(user_id: str):
     return await _proxy_json("GET", f"{settings.data_service_url}/report/weekly/{user_id}")
 
 
+@app.get("/report/pdf/{user_id}")
+async def pdf_report(user_id: str):
+    return await _proxy_json("GET", f"{settings.ai_service_url}/report/pdf/{user_id}")
+
+
 @app.get("/culture/library")
 async def culture_library(q: str = "", category: str = ""):
     return await _proxy_json("GET", f"{settings.ai_service_url}/culture/library", params={"q": q, "category": category})

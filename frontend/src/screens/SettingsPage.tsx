@@ -30,6 +30,8 @@ function parseFamilyContacts(value: string): NonNullable<UserProfile['family_con
     .filter(Boolean) as NonNullable<UserProfile['family_contacts']>
 }
 
+type Section = 'profile' | 'assistant' | 'alarms' | 'history' | null
+
 export function SettingsPage() {
   const [session] = useState<AppSession | null>(() => getStoredSession())
   const [profile, setProfile] = useState<UserProfile | null>(null)
@@ -40,32 +42,11 @@ export function SettingsPage() {
   const [alarms, setAlarms] = useState<AlarmItem[]>([])
   const [alarmTitle, setAlarmTitle] = useState('Alarm')
   const [alarmTime, setAlarmTime] = useState('')
-  const [permissionState, setPermissionState] = useState({
-    microphone: 'unknown',
-    notifications: typeof Notification !== 'undefined' ? Notification.permission : 'unsupported',
-    location: 'unknown',
-  })
+  const [openSection, setOpenSection] = useState<Section>(null)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
 
-  const refreshPermissions = async () => {
-    const next = {
-      microphone: 'unknown',
-      notifications: typeof Notification !== 'undefined' ? Notification.permission : 'unsupported',
-      location: 'unknown',
-    }
-    try {
-      if (navigator.permissions?.query) {
-        const mic = await navigator.permissions.query({ name: 'microphone' as PermissionName })
-        next.microphone = mic.state
-        const geo = await navigator.permissions.query({ name: 'geolocation' as PermissionName })
-        next.location = geo.state
-      }
-    } catch {
-      // ignore unsupported permissions api
-    }
-    setPermissionState(next)
-  }
+  const toggle = (s: Section) => setOpenSection((prev) => (prev === s ? null : s))
 
   const load = async () => {
     if (!session) return
@@ -78,7 +59,6 @@ export function SettingsPage() {
   useEffect(() => {
     if (!session) return
     void load().catch((e: unknown) => setError((e as { message?: string } | undefined)?.message || 'Could not load settings'))
-    void refreshPermissions()
   }, [session])
 
   const historyGroups = useMemo(() => {
@@ -117,99 +97,43 @@ export function SettingsPage() {
   }
 
   const fetchCurrentLocation = async () => {
-    if (!navigator.geolocation) {
-      setError('Geolocation is not available in this browser')
-      return
-    }
+    if (!navigator.geolocation) { setError('Geolocation not available'); return }
     try {
-      setLocationBusy(true)
-      setError('')
+      setLocationBusy(true); setError('')
       const coords = await new Promise<{ lat: number; lon: number }>((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(
-          (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
-          reject,
-          { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 },
-        )
+          (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }), reject, { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 })
       })
-      setProfile((current) => (current ? { ...current, lat: coords.lat, lon: coords.lon } : current))
-      setMessage('Current location fetched. Save settings to keep it.')
-    } catch {
-      setError('Could not fetch current location')
-    } finally {
-      setLocationBusy(false)
-      void refreshPermissions()
-    }
-  }
-
-  const requestMicrophone = async () => {
-    try {
-      setError('')
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      stream.getTracks().forEach((track) => track.stop())
-      setMessage('Microphone access granted.')
-    } catch {
-      setError('Could not get microphone permission')
-    } finally {
-      void refreshPermissions()
-    }
-  }
-
-  const requestNotifications = async () => {
-    try {
-      setError('')
-      if ('Notification' in window) {
-        await Notification.requestPermission()
-      }
-      setMessage('Notification permission updated.')
-    } catch {
-      setError('Could not update notification permission')
-    } finally {
-      void refreshPermissions()
-    }
+      setProfile((c) => (c ? { ...c, lat: coords.lat, lon: coords.lon } : c))
+      setMessage('Location fetched. Save to keep it.')
+    } catch { setError('Could not fetch location') }
+    finally { setLocationBusy(false) }
   }
 
   const save = async () => {
     if (!session || !profile) return
     try {
-      setSaving(true)
-      setError('')
-      setMessage('')
+      setSaving(true); setError(''); setMessage('')
       const user = await updateUserProfile(session.user_id, profile)
       setProfile(user)
-      setMessage('Settings saved.')
+      setMessage('Saved.')
     } catch (e: unknown) {
-      setError((e as { message?: string } | undefined)?.message || 'Could not save settings')
-    } finally {
-      setSaving(false)
-    }
+      setError((e as { message?: string } | undefined)?.message || 'Could not save')
+    } finally { setSaving(false) }
   }
 
   const addManualAlarm = async () => {
     if (!session || !alarmTime) return
     try {
       const now = new Date()
-      const [hourPart, minutePart] = alarmTime.split(':').map((item) => Number(item))
-      if (Number.isNaN(hourPart) || Number.isNaN(minutePart)) {
-        setError('Please choose a valid alarm time')
-        return
-      }
-      const when = new Date(now)
-      when.setSeconds(0, 0)
-      when.setHours(hourPart, minutePart, 0, 0)
+      const [h, m] = alarmTime.split(':').map(Number)
+      if (Number.isNaN(h) || Number.isNaN(m)) { setError('Invalid time'); return }
+      const when = new Date(now); when.setSeconds(0, 0); when.setHours(h, m, 0, 0)
       if (when.getTime() <= now.getTime()) when.setDate(when.getDate() + 1)
-      await createAlarm(session.user_id, {
-        title: alarmTitle || 'Alarm',
-        time_iso: when.toISOString(),
-        label: alarmTitle || 'Alarm',
-        source: 'manual',
-      })
-      setAlarmTime('')
-      setAlarmTitle('Alarm')
-      setMessage('Alarm added.')
+      await createAlarm(session.user_id, { title: alarmTitle || 'Alarm', time_iso: when.toISOString(), label: alarmTitle || 'Alarm', source: 'manual' })
+      setAlarmTime(''); setAlarmTitle('Alarm'); setMessage('Alarm added.')
       await load()
-    } catch (e: unknown) {
-      setError((e as { message?: string } | undefined)?.message || 'Could not add alarm')
-    }
+    } catch (e: unknown) { setError((e as { message?: string } | undefined)?.message || 'Could not add alarm') }
   }
 
   if (!session) {
@@ -221,301 +145,190 @@ export function SettingsPage() {
   }
 
   return (
-    <AppShell title="Settings" subtitle="Profile, language, support circle, and assistant controls.">
+    <AppShell title="Settings" subtitle="Account and preferences.">
+      {/* Account card — always visible, compact */}
       <Card>
-        <p className="text-lg font-extrabold tracking-tight text-ink">Account</p>
-        <div className="mt-3 rounded-2xl bg-white/70 p-3 shadow-soft ring-1 ring-black/5">
-          <p className="text-sm font-semibold text-ink">{session.email || 'Signed in'}</p>
-          <p className="mt-1 text-sm text-ink/60">Role: {session.role === 'support' ? 'Support' : 'Elder'}</p>
-        </div>
-        <div className="mt-3">
-          <PressableButton
-            variant="soft"
-            size="lg"
-            onClick={() => {
-              clearStoredSession()
-              window.location.reload()
-            }}
-          >
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-lg font-extrabold tracking-tight text-ink">{profile?.name || session.display_name || 'Account'}</p>
+            <p className="text-sm text-ink/60">{session.email || 'Signed in'} · {session.role === 'support' ? 'Family manager' : 'Elder'}</p>
+          </div>
+          <PressableButton variant="soft" size="md" onClick={() => { clearStoredSession(); window.location.reload() }}>
             Sign out
           </PressableButton>
         </div>
       </Card>
 
+      {error ? <Card><p className="text-sm font-semibold text-danger">{error}</p></Card> : null}
+      {message ? <Card><p className="text-sm font-semibold text-ink/70">{message}</p></Card> : null}
+
+      {/* Collapsible: Profile & Support Circle */}
       <Card>
-        <p className="text-lg font-extrabold tracking-tight text-ink">Profile</p>
-        <div className="mt-3 space-y-2">
-          {[
-            ['Name', 'name'],
-            ['Region', 'region'],
-            ['City', 'city'],
-            ['Origin', 'origin'],
-            ['Wake Time', 'wake_time'],
-            ['Sleep Time', 'sleep_time'],
-            ['Phone', 'phone'],
-            ['Primary Support Name', 'caretaker_name'],
-            ['Primary Support Phone', 'caretaker_phone'],
-          ].map(([label, key]) => (
-            <label key={key} className="block text-sm font-semibold text-ink/70">
-              <span>{label}</span>
-              <input
-                value={String((profile as Record<string, unknown> | null)?.[key] || '')}
-                onChange={(e) => setProfile((current) => (current ? { ...current, [key]: e.target.value } : current))}
-                className="mt-1 w-full rounded-xl2 border-0 bg-white/75 px-3 py-3 text-base shadow-soft ring-1 ring-black/5"
-              />
+        <button onClick={() => toggle('profile')} className="flex w-full items-center justify-between text-left">
+          <p className="text-lg font-extrabold tracking-tight text-ink">Profile &amp; support circle</p>
+          <span className="text-xl text-ink/40">{openSection === 'profile' ? '−' : '+'}</span>
+        </button>
+        {openSection === 'profile' && (
+          <div className="mt-3 space-y-2">
+            {[
+              ['Name', 'name'], ['Region', 'region'], ['City', 'city'],
+              ['Phone', 'phone'], ['Wake time', 'wake_time'], ['Sleep time', 'sleep_time'],
+              ['Support name', 'caretaker_name'], ['Support phone', 'caretaker_phone'],
+            ].map(([label, key]) => (
+              <label key={key} className="block text-sm font-semibold text-ink/70">
+                <span>{label}</span>
+                <input
+                  value={String((profile as Record<string, unknown> | null)?.[key] || '')}
+                  onChange={(e) => setProfile((c) => (c ? { ...c, [key]: e.target.value } : c))}
+                  className="mt-1 w-full rounded-xl2 border-0 bg-white/75 px-3 py-2.5 text-base shadow-soft ring-1 ring-black/5"
+                />
+              </label>
+            ))}
+            <label className="block text-sm font-semibold text-ink/70">
+              <span>Language</span>
+              <select
+                value={profile?.language || 'English'}
+                onChange={(e) => setProfile((c) => (c ? { ...c, language: e.target.value } : c))}
+                className="mt-1 w-full rounded-xl2 border-0 bg-white/75 px-3 py-2.5 text-base shadow-soft ring-1 ring-black/5"
+              >
+                {regionalLanguages.map((l) => <option key={l} value={l}>{l}</option>)}
+              </select>
             </label>
-          ))}
-          <label className="block text-sm font-semibold text-ink/70">
-            <span>Regional language</span>
-            <select
-              value={profile?.language || 'English'}
-              onChange={(e) => setProfile((current) => (current ? { ...current, language: e.target.value } : current))}
-              className="mt-1 w-full rounded-xl2 border-0 bg-white/75 px-3 py-3 text-base shadow-soft ring-1 ring-black/5"
-            >
-              {regionalLanguages.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="rounded-2xl bg-white/70 p-3 shadow-soft ring-1 ring-black/5">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-extrabold text-ink">Saved location</p>
-                <p className="mt-1 text-sm text-ink/60">
-                  {profile?.lat != null && profile?.lon != null ? `${profile.lat}, ${profile.lon}` : 'No saved coordinates yet'}
-                </p>
-              </div>
-              <PressableButton variant="soft" size="md" onClick={() => void fetchCurrentLocation()} disabled={locationBusy}>
-                {locationBusy ? 'Fetching...' : 'Use current'}
-              </PressableButton>
-            </div>
-          </div>
-        </div>
-      </Card>
-
-      <Card>
-        <p className="text-lg font-extrabold tracking-tight text-ink">Support circle</p>
-        <p className="mt-1 text-sm text-ink/60">One contact per line. Use: name | relation | phone</p>
-        <textarea
-          rows={5}
-          value={familyContactsText(profile)}
-          onChange={(e) =>
-            setProfile((current) =>
-              current
-                ? {
-                    ...current,
-                    family_contacts: parseFamilyContacts(e.target.value),
-                  }
-                : current,
-            )
-          }
-          placeholder={'Kiran | son | +91-9999999999\nAnita | daughter | +91-9888888888'}
-          className="mt-3 w-full rounded-xl2 border-0 bg-white/75 px-3 py-3 text-base shadow-soft ring-1 ring-black/5"
-        />
-      </Card>
-
-      <Card>
-        <p className="text-lg font-extrabold tracking-tight text-ink">Assistant settings</p>
-        <div className="mt-3 space-y-3">
-          {[
-            ['History enabled', 'history_enabled'],
-            ['Location enabled', 'location_enabled'],
-            ['Wake word enabled', 'wake_word_enabled'],
-            ['Auto send on pause', 'auto_send_on_pause'],
-          ].map(([label, key]) => (
-            <label key={key} className="flex items-center justify-between rounded-2xl bg-white/70 px-3 py-3 shadow-soft ring-1 ring-black/5">
-              <span className="text-sm font-semibold text-ink/70">{label}</span>
-              <input
-                type="checkbox"
-                checked={Boolean(profile?.settings?.[key as keyof NonNullable<UserProfile['settings']>])}
-                onChange={(e) =>
-                  setProfile((current) =>
-                    current
-                      ? {
-                          ...current,
-                          settings: {
-                            ...current.settings,
-                            [key]: e.target.checked,
-                          },
-                        }
-                      : current,
-                  )
-                }
-              />
-            </label>
-          ))}
-          <label className="block text-sm font-semibold text-ink/70">
-            <span>Wake words (comma separated)</span>
-            <input
-              value={(profile?.settings?.wake_words || []).join(', ')}
-              onChange={(e) =>
-                setProfile((current) =>
-                  current
-                    ? {
-                        ...current,
-                        settings: {
-                          ...current.settings,
-                          wake_words: e.target.value.split(',').map((item) => item.trim()).filter(Boolean),
-                        },
-                      }
-                    : current,
-                )
-              }
-              className="mt-1 w-full rounded-xl2 border-0 bg-white/75 px-3 py-3 text-base shadow-soft ring-1 ring-black/5"
-            />
-          </label>
-          <label className="block text-sm font-semibold text-ink/70">
-            <span>Preferences (comma separated)</span>
-            <input
-              value={(profile?.preferences || []).join(', ')}
-              onChange={(e) =>
-                setProfile((current) =>
-                  current
-                    ? {
-                        ...current,
-                        preferences: e.target.value.split(',').map((item) => item.trim()).filter(Boolean),
-                      }
-                    : current,
-                )
-              }
-              className="mt-1 w-full rounded-xl2 border-0 bg-white/75 px-3 py-3 text-base shadow-soft ring-1 ring-black/5"
-            />
-          </label>
-        </div>
-        <div className="mt-3">
-          <PressableButton variant="primary" size="lg" onClick={() => void save()} disabled={saving}>
-            {saving ? 'Saving...' : 'Save settings'}
-          </PressableButton>
-        </div>
-        {message ? <p className="mt-2 text-sm font-semibold text-ink/70">{message}</p> : null}
-        {error ? <p className="mt-2 text-sm font-semibold text-danger">{error}</p> : null}
-      </Card>
-
-      <Card>
-        <p className="text-lg font-extrabold tracking-tight text-ink">Permissions center</p>
-        <p className="mt-1 text-sm text-ink/60">Check and request the browser permissions Bhumi needs for voice, notifications, and location.</p>
-        <div className="mt-3 space-y-2">
-          {([
-            { label: 'Microphone', state: permissionState.microphone, handler: requestMicrophone },
-            { label: 'Notifications', state: permissionState.notifications, handler: requestNotifications },
-            { label: 'Location', state: permissionState.location, handler: fetchCurrentLocation },
-          ] as const).map((item) => (
-            <div key={item.label} className="flex items-center justify-between gap-3 rounded-2xl bg-white/70 px-3 py-3 shadow-soft ring-1 ring-black/5">
-              <div>
-                <p className="text-sm font-extrabold text-ink">{item.label}</p>
-                <p className="mt-1 text-sm text-ink/60">Status: {item.state}</p>
-              </div>
-              <PressableButton variant="soft" size="md" onClick={() => void item.handler()}>
-                Request
-              </PressableButton>
-            </div>
-          ))}
-        </div>
-      </Card>
-
-      <Card>
-        <p className="text-lg font-extrabold tracking-tight text-ink">Alarms and reminders</p>
-        <div className="mt-3 grid gap-2 sm:grid-cols-[1fr,160px,auto]">
-          <input
-            value={alarmTitle}
-            onChange={(e) => setAlarmTitle(e.target.value)}
-            placeholder="Alarm label"
-            className="rounded-xl2 border-0 bg-white/75 px-3 py-3 text-base shadow-soft ring-1 ring-black/5"
-          />
-          <input
-            type="time"
-            value={alarmTime}
-            onChange={(e) => setAlarmTime(e.target.value)}
-            className="rounded-xl2 border-0 bg-white/75 px-3 py-3 text-base shadow-soft ring-1 ring-black/5"
-          />
-          <PressableButton variant="primary" size="lg" onClick={() => void addManualAlarm()}>
-            Add alarm
-          </PressableButton>
-        </div>
-        <div className="mt-3 space-y-2">
-          {alarms.map((alarm) => (
-            <div key={alarm.id} className="flex items-center justify-between gap-3 rounded-2xl bg-white/70 p-3 shadow-soft ring-1 ring-black/5">
-              <div>
-                <p className="text-sm font-extrabold text-ink">{alarm.title}</p>
-                <p className="mt-1 text-sm text-ink/60">{new Date(alarm.time_iso).toLocaleString()}</p>
-              </div>
-              <PressableButton variant="soft" size="md" onClick={() => session && void deleteAlarm(session.user_id, alarm.id).then(() => load())}>
-                Delete
-              </PressableButton>
-            </div>
-          ))}
-          {!alarms.length ? <p className="text-sm text-ink/60">No alarms yet.</p> : null}
-        </div>
-      </Card>
-
-      <Card>
-        <p className="text-lg font-extrabold tracking-tight text-ink">Daily chat history</p>
-        <p className="mt-1 text-sm text-ink/60">This updates from saved conversations and is grouped by day.</p>
-        <div className="mt-3 grid gap-2">
-          {historyGroups.map((group) => (
-            <div key={group.day} className="rounded-2xl bg-white/70 p-3 shadow-soft ring-1 ring-black/5">
+            <div className="rounded-2xl bg-white/70 p-3 shadow-soft ring-1 ring-black/5">
               <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-extrabold text-ink">{group.day}</p>
-                  <p className="mt-1 text-xs font-semibold tracking-wide text-ink/55">{group.items.length} chats</p>
-                </div>
-                <PressableButton variant="soft" size="md" onClick={() => void removeDay(group.day)} disabled={historyBusy === group.day}>
-                  {historyBusy === group.day ? 'Deleting...' : 'Delete day'}
+                <p className="text-sm text-ink/60">
+                  {profile?.lat != null && profile?.lon != null ? `Location: ${profile.lat.toFixed(4)}, ${profile.lon.toFixed(4)}` : 'No location saved'}
+                </p>
+                <PressableButton variant="soft" size="md" onClick={() => void fetchCurrentLocation()} disabled={locationBusy}>
+                  {locationBusy ? '...' : 'Update'}
                 </PressableButton>
               </div>
-              <div className="mt-3 space-y-2">
-                {group.items.map((item) => (
-                  <div key={item.id} className="rounded-2xl bg-white/80 p-3 ring-1 ring-black/5">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold tracking-wide text-ink/55">
-                          {(item.ts || '').replace('T', ' ').slice(0, 16)}
-                        </p>
-                        <p className="mt-1 text-sm text-ink/70">
-                          <span className="font-bold text-ink">You:</span> {item.text_input}
-                        </p>
-                        <p className="mt-2 text-sm font-semibold text-ink">
-                          <span className="font-extrabold">ElderMind:</span> {item.ai_response}
-                        </p>
-                      </div>
-                      <PressableButton variant="soft" size="md" onClick={() => void removeItem(item.id)} disabled={historyBusy === item.id}>
-                        {historyBusy === item.id ? '...' : 'Delete'}
-                      </PressableButton>
-                    </div>
-                  </div>
-                ))}
-              </div>
             </div>
-          ))}
-          {!historyGroups.length ? <p className="text-sm text-ink/60">No stored chat history yet.</p> : null}
-        </div>
+            <p className="text-sm font-semibold text-ink/70 mt-2">Support circle (name | relation | phone per line)</p>
+            <textarea
+              rows={3}
+              value={familyContactsText(profile)}
+              onChange={(e) => setProfile((c) => c ? { ...c, family_contacts: parseFamilyContacts(e.target.value) } : c)}
+              placeholder={'Kiran | son | +91-9999999999'}
+              className="w-full rounded-xl2 border-0 bg-white/75 px-3 py-2.5 text-base shadow-soft ring-1 ring-black/5"
+            />
+            <PressableButton variant="primary" size="lg" onClick={() => void save()} disabled={saving}>
+              {saving ? 'Saving...' : 'Save'}
+            </PressableButton>
+          </div>
+        )}
       </Card>
 
+      {/* Collapsible: Assistant settings */}
       <Card>
-        <p className="text-lg font-extrabold tracking-tight text-ink">Privacy reset</p>
-        <div className="mt-3 grid gap-2">
-          <PressableButton
-            variant="soft"
-            onClick={() => {
-              if (!session) return
-              void clearConversationHistory(session.user_id).then(() => load())
-            }}
-          >
-            Clear conversation history
-          </PressableButton>
-          <PressableButton
-            variant="soft"
-            onClick={() => {
-              if (!session) return
-              void clearMemories(session.user_id).then(() => load())
-            }}
-          >
-            Clear stored memories
-          </PressableButton>
-        </div>
-        <p className="mt-3 text-sm text-ink/60">Stored messages: {history.length}</p>
+        <button onClick={() => toggle('assistant')} className="flex w-full items-center justify-between text-left">
+          <p className="text-lg font-extrabold tracking-tight text-ink">Assistant &amp; permissions</p>
+          <span className="text-xl text-ink/40">{openSection === 'assistant' ? '−' : '+'}</span>
+        </button>
+        {openSection === 'assistant' && (
+          <div className="mt-3 space-y-2">
+            {[
+              ['History enabled', 'history_enabled'],
+              ['Location enabled', 'location_enabled'],
+              ['Wake word enabled', 'wake_word_enabled'],
+              ['Auto send on pause', 'auto_send_on_pause'],
+            ].map(([label, key]) => (
+              <label key={key} className="flex items-center justify-between rounded-2xl bg-white/70 px-3 py-2.5 shadow-soft ring-1 ring-black/5">
+                <span className="text-sm font-semibold text-ink/70">{label}</span>
+                <input
+                  type="checkbox"
+                  checked={Boolean(profile?.settings?.[key as keyof NonNullable<UserProfile['settings']>])}
+                  onChange={(e) =>
+                    setProfile((c) => c ? { ...c, settings: { ...c.settings, [key]: e.target.checked } } : c)
+                  }
+                />
+              </label>
+            ))}
+            <label className="block text-sm font-semibold text-ink/70">
+              <span>Wake words</span>
+              <input
+                value={(profile?.settings?.wake_words || []).join(', ')}
+                onChange={(e) => setProfile((c) => c ? { ...c, settings: { ...c.settings, wake_words: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) } } : c)}
+                className="mt-1 w-full rounded-xl2 border-0 bg-white/75 px-3 py-2.5 text-base shadow-soft ring-1 ring-black/5"
+              />
+            </label>
+            <PressableButton variant="primary" size="lg" onClick={() => void save()} disabled={saving}>
+              {saving ? 'Saving...' : 'Save'}
+            </PressableButton>
+          </div>
+        )}
+      </Card>
+
+      {/* Collapsible: Alarms */}
+      <Card>
+        <button onClick={() => toggle('alarms')} className="flex w-full items-center justify-between text-left">
+          <p className="text-lg font-extrabold tracking-tight text-ink">Alarms ({alarms.length})</p>
+          <span className="text-xl text-ink/40">{openSection === 'alarms' ? '−' : '+'}</span>
+        </button>
+        {openSection === 'alarms' && (
+          <div className="mt-3 space-y-2">
+            <div className="grid gap-2 sm:grid-cols-[1fr,120px,auto]">
+              <input value={alarmTitle} onChange={(e) => setAlarmTitle(e.target.value)} placeholder="Label" className="rounded-xl2 border-0 bg-white/75 px-3 py-2.5 text-base shadow-soft ring-1 ring-black/5" />
+              <input type="time" value={alarmTime} onChange={(e) => setAlarmTime(e.target.value)} className="rounded-xl2 border-0 bg-white/75 px-3 py-2.5 text-base shadow-soft ring-1 ring-black/5" />
+              <PressableButton variant="primary" size="lg" onClick={() => void addManualAlarm()}>Add</PressableButton>
+            </div>
+            {alarms.map((a) => (
+              <div key={a.id} className="flex items-center justify-between gap-3 rounded-2xl bg-white/70 p-3 shadow-soft ring-1 ring-black/5">
+                <div>
+                  <p className="text-sm font-extrabold text-ink">{a.title}</p>
+                  <p className="text-xs text-ink/60">{new Date(a.time_iso).toLocaleString()}</p>
+                </div>
+                <PressableButton variant="soft" size="md" onClick={() => session && void deleteAlarm(session.user_id, a.id).then(() => load())}>Del</PressableButton>
+              </div>
+            ))}
+            {!alarms.length ? <p className="text-sm text-ink/60">No alarms yet.</p> : null}
+          </div>
+        )}
+      </Card>
+
+      {/* Collapsible: Chat history */}
+      <Card>
+        <button onClick={() => toggle('history')} className="flex w-full items-center justify-between text-left">
+          <p className="text-lg font-extrabold tracking-tight text-ink">Chat history ({history.length})</p>
+          <span className="text-xl text-ink/40">{openSection === 'history' ? '−' : '+'}</span>
+        </button>
+        {openSection === 'history' && (
+          <div className="mt-3 space-y-2">
+            <div className="grid gap-2 grid-cols-2">
+              <PressableButton variant="soft" onClick={() => { if (session) void clearConversationHistory(session.user_id).then(() => load()) }}>
+                Clear chats
+              </PressableButton>
+              <PressableButton variant="soft" onClick={() => { if (session) void clearMemories(session.user_id).then(() => load()) }}>
+                Clear memories
+              </PressableButton>
+            </div>
+            {historyGroups.map((g) => (
+              <div key={g.day} className="rounded-2xl bg-white/70 p-3 shadow-soft ring-1 ring-black/5">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-extrabold text-ink">{g.day} <span className="font-normal text-ink/55">({g.items.length})</span></p>
+                  <PressableButton variant="soft" size="md" onClick={() => void removeDay(g.day)} disabled={historyBusy === g.day}>
+                    {historyBusy === g.day ? '...' : 'Delete'}
+                  </PressableButton>
+                </div>
+                <div className="mt-2 space-y-1">
+                  {g.items.slice(0, 5).map((item) => (
+                    <div key={item.id} className="flex items-start justify-between gap-2 rounded-xl bg-white/80 p-2 ring-1 ring-black/5">
+                      <div className="min-w-0 text-xs">
+                        <p className="text-ink/70"><span className="font-bold">You:</span> {item.text_input}</p>
+                        <p className="mt-0.5 font-semibold text-ink">{item.ai_response}</p>
+                      </div>
+                      <button onClick={() => void removeItem(item.id)} disabled={historyBusy === item.id} className="shrink-0 text-xs text-ink/40 hover:text-danger">
+                        {historyBusy === item.id ? '...' : 'x'}
+                      </button>
+                    </div>
+                  ))}
+                  {g.items.length > 5 ? <p className="text-xs text-ink/50">+{g.items.length - 5} more</p> : null}
+                </div>
+              </div>
+            ))}
+            {!historyGroups.length ? <p className="text-sm text-ink/60">No history yet.</p> : null}
+          </div>
+        )}
       </Card>
     </AppShell>
   )

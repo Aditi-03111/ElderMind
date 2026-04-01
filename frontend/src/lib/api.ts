@@ -516,6 +516,11 @@ export async function getWeeklyReport(user_id: string): Promise<WeeklyReport> {
   return asJson<WeeklyReport>(res)
 }
 
+export async function generatePdfReport(user_id: string): Promise<{ pdf_url: string; filename: string; user_name: string }> {
+  const res = await fetch(`${API_BASE}/report/pdf/${encodeURIComponent(user_id)}`, { headers: _authHeaders() })
+  return asJson<{ status: string; pdf_url: string; filename: string; user_name: string }>(res)
+}
+
 export async function getDailyCulture(user_id: string): Promise<{ calendar: DailyCulture; stories: CulturalItem[] }> {
   const res = await fetch(`${API_BASE}/culture/daily/${encodeURIComponent(user_id)}`, { headers: _authHeaders() })
   return asJson<{ status: string; calendar: DailyCulture; stories: CulturalItem[] }>(res)

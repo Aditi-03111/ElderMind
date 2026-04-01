@@ -26,6 +26,7 @@ from .stt import transcribe_audio_bytes
 from .tavily_client import tavily_search
 from .tts import synthesize_mp3
 from .vedastro_client import fetch_tithi_festival
+from .pdf_report import generate_wellness_pdf
 from .weather_client import fetch_openweather_summary
 
 
@@ -713,6 +714,29 @@ async def analyze_rppg(request: Request):
         except Exception:
             logger.exception("Failed to persist rPPG activity for user=%s", user_id)
 
+        # Share rPPG report with caretaker/family via alerts service
+        try:
+            rppg_message = (
+                f"Bhumi Camera Wellness Check for user {user_id}:\n"
+                f"Estimated pulse: {round(result['bpm'])} BPM\n"
+                f"Signal quality: {result['sqi']:.2f}\n"
+                f"{note}\n\n"
+                f"This is an experimental reading, not a medical diagnosis."
+            )
+            async with httpx.AsyncClient(timeout=15) as client:
+                await client.post(
+                    f"{settings.alerts_service_url}/report-share",
+                    json={
+                        "user_id": user_id,
+                        "file_name": "Camera Wellness Check",
+                        "summary": f"Estimated pulse: {round(result['bpm'])} BPM, Signal quality: {result['sqi']:.2f}",
+                        "advice": "This is an experimental camera reading only. Please do not use for medical decisions.",
+                        "severity": 40,
+                    },
+                )
+        except Exception:
+            logger.warning("Failed to share rPPG report with caretakers for user=%s", user_id, exc_info=True)
+
     return {
         "status": "success",
         "bpm": result["bpm"],
@@ -723,6 +747,55 @@ async def analyze_rppg(request: Request):
         "plot_url": plot_url,
         "note": note,
         "medical_notice": "Experimental camera wellness check only. Do not use for diagnosis or emergency decisions.",
+    }
+
+
+@app.get("/report/pdf/{user_id}")
+async def generate_pdf_report(user_id: str):
+    """Generate a branded Bhumi wellness PDF report for sharing."""
+    try:
+        context = await _fetch_user_context(user_id)
+    except Exception:
+        context = {"user": {"user_id": user_id, "name": "Friend"}, "medicines": [], "recent_conversations": [], "memories": [], "activity": {}}
+
+    profile = context["user"]
+
+    # Fetch weekly report data from data service
+    report_data: dict[str, Any] = {}
+    alerts: list[dict[str, Any]] = []
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            report_res = await client.get(f"{settings.data_service_url}/weekly-report/{user_id}")
+            if report_res.is_success:
+                report_data = report_res.json() or {}
+            alerts_res = await client.get(f"{settings.data_service_url}/alerts/{user_id}", params={"limit": 10})
+            if alerts_res.is_success:
+                alerts = (alerts_res.json() or {}).get("items") or []
+    except Exception:
+        logger.warning("Could not fetch report data for PDF generation user=%s", user_id, exc_info=True)
+
+    try:
+        filename = generate_wellness_pdf(
+            user_name=str(profile.get("name") or "Friend"),
+            user_age=profile.get("age") or 72,
+            user_language=str(profile.get("language") or "Hindi"),
+            user_region=str(profile.get("region") or profile.get("city") or ""),
+            report_data=report_data,
+            medicines=context.get("medicines") or [],
+            recent_alerts=alerts,
+            out_dir=settings.media_dir,
+        )
+    except Exception as exc:
+        logger.exception("PDF generation failed for user=%s", user_id)
+        return JSONResponse(status_code=500, content={"status": "error", "message": str(exc)})
+
+    pdf_url = f"{settings.base_url}/media/{filename}"
+    return {
+        "status": "success",
+        "pdf_url": pdf_url,
+        "filename": filename,
+        "user_id": user_id,
+        "user_name": str(profile.get("name") or "Friend"),
     }
 
 
@@ -853,7 +926,7 @@ async def voice(request: Request):
             tithi_today = ""
 
     tool_context = ""
-    if settings.tavily_api_key and any(word in user_text.lower() for word in ("weather", "news", "latest", "today", "price")):
+    if settings.tavily_api_key and any(word in user_text.lower() for word in ("weather", "news", "latest", "today", "price", "score", "match", "cricket", "football", "ipl", "world cup", "election", "result")):
         try:
             results = await tavily_search(settings.tavily_api_key, user_text, max_results=3)
             if results:

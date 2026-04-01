@@ -133,6 +133,22 @@ function normalizeParentUserId(value: string) {
     .replace(/^-+|-+$/g, '')
 }
 
+/* ── Collapsible section header ── */
+function SectionHead({ title, section, open, toggle }: { title: string; section: string; open: boolean; toggle: (s: string) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={() => toggle(section)}
+      className="flex w-full items-center justify-between rounded-2xl bg-white/60 px-4 py-2.5 text-left shadow-soft ring-1 ring-black/5 transition-colors hover:bg-white/80"
+    >
+      <span className="text-sm font-extrabold tracking-tight text-ink">{title}</span>
+      <span className="text-lg font-bold text-ink/40">{open ? '\u2212' : '+'}</span>
+    </button>
+  )
+}
+
+const INPUT_CLS = 'mt-1 w-full rounded-xl2 border-0 bg-white/75 px-3 py-2.5 text-base shadow-soft ring-1 ring-black/5'
+
 export function CaregiverPage() {
   const [session] = useState<AppSession | null>(() => getStoredSession())
   const [workspace, setWorkspace] = useState<SupportWorkspace | null>(null)
@@ -162,6 +178,9 @@ export function CaregiverPage() {
   const [supportActionBusy, setSupportActionBusy] = useState('')
   const [whatsAppBusy, setWhatsAppBusy] = useState(false)
   const [reportBusy, setReportBusy] = useState(false)
+
+  const [openSection, setOpenSection] = useState<string | null>(null)
+  const toggle = (s: string) => setOpenSection((prev) => (prev === s ? null : s))
 
   const accountId = session?.caregiver_id || ''
   const active = workspace?.active || null
@@ -668,367 +687,303 @@ export function CaregiverPage() {
     }
   }
 
+  /* ════════════════════════════════════════════
+     JSX — compact collapsible layout
+     ════════════════════════════════════════════ */
+
   return (
-    <AppShell title="Family Hub" subtitle="Manage parents, medicines, reminders, caretakers, and reports from one clean dashboard.">
+    <AppShell title="Family Hub" subtitle="Manage parents, medicines, reminders, caretakers, and reports.">
+
+      {/* ── Manager account header (always visible, compact) ── */}
       <Card>
         <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="rounded-2xl bg-sky/15 p-2 ring-1 ring-black/5">
-              <FamilySticker className="h-12 w-12" tone="sky" />
-            </div>
-            <div>
-              <p className="text-lg font-extrabold tracking-tight text-ink">Manager account</p>
-              <p className="mt-1 text-sm text-ink/60">{workspace?.account?.email || session.email || 'Signed in'}</p>
-            </div>
+          <div>
+            <p className="text-base font-extrabold tracking-tight text-ink">Manager account</p>
+            <p className="text-sm text-ink/60">
+              {workspace?.account?.name || session.display_name}
+              {workspace?.account?.phone ? ` | ${workspace.account.phone}` : ''}
+              {' | '}
+              {workspace?.account?.email || session.email || 'Signed in'}
+            </p>
           </div>
           <PressableButton variant="soft" size="md" onClick={() => void load()}>
             Refresh
           </PressableButton>
         </div>
-        <p className="mt-3 text-sm text-ink/65">
-          {workspace?.account?.name || session.display_name}
-          {workspace?.account?.phone ? ` | ${workspace.account.phone}` : ''}
-        </p>
-        {message ? <p className="mt-3 text-sm font-semibold text-ink/70">{message}</p> : null}
-        {parentLoginNotice ? <p className="mt-2 text-sm font-semibold text-mint-900">{parentLoginNotice}</p> : null}
-        {error ? <p className="mt-2 text-sm font-semibold text-danger">{error}</p> : null}
+        {message ? <p className="mt-2 text-sm font-semibold text-ink/70">{message}</p> : null}
+        {parentLoginNotice ? <p className="mt-1 text-sm font-semibold text-mint-900">{parentLoginNotice}</p> : null}
+        {error ? <p className="mt-1 text-sm font-semibold text-danger">{error}</p> : null}
       </Card>
 
-      <Card>
-        <div className="flex items-center gap-3">
-          <div className="rounded-2xl bg-mint/15 p-2 ring-1 ring-black/5">
-            <SparkleSticker className="h-10 w-10" />
+      {/* ── Manager profile (collapsed) ── */}
+      <SectionHead title="Family manager profile" section="manager" open={openSection === 'manager'} toggle={toggle} />
+      {openSection === 'manager' && (
+        <Card>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {([['Your name', 'name'], ['Email', 'email'], ['Phone', 'phone'], ['Relation', 'relation']] as const).map(([label, key]) => (
+              <label key={key} className="block text-sm font-semibold text-ink/70">
+                <span>{label}</span>
+                <input
+                  value={managerForm[key]}
+                  onChange={(e) => setManagerForm((current) => ({ ...current, [key]: e.target.value }))}
+                  className={INPUT_CLS}
+                />
+              </label>
+            ))}
           </div>
-          <div>
-            <p className="text-lg font-extrabold tracking-tight text-ink">Family manager profile</p>
-            <p className="mt-1 text-sm text-ink/60">This is your own profile. It is separate from the parent profiles you create below.</p>
+          <div className="mt-2">
+            <PressableButton variant="primary" size="lg" onClick={() => void saveManagerProfile()} disabled={savingManager}>
+              {savingManager ? 'Saving...' : 'Save profile'}
+            </PressableButton>
           </div>
-        </div>
-        <div className="mt-3 grid gap-2 sm:grid-cols-2">
-          {[
-            ['Your name', 'name'],
-            ['Email', 'email'],
-            ['Phone', 'phone'],
-            ['Relation', 'relation'],
-          ].map(([label, key]) => (
-            <label key={key} className="block text-sm font-semibold text-ink/70">
-              <span>{label}</span>
-              <input
-                value={managerForm[key as keyof ManagerForm]}
-                onChange={(e) => setManagerForm((current) => ({ ...current, [key]: e.target.value }))}
-                className="mt-1 w-full rounded-xl2 border-0 bg-white/75 px-3 py-3 text-base shadow-soft ring-1 ring-black/5"
-              />
-            </label>
-          ))}
-        </div>
-        <div className="mt-3">
-          <PressableButton variant="primary" size="lg" onClick={() => void saveManagerProfile()} disabled={savingManager}>
-            {savingManager ? 'Saving...' : 'Save family manager profile'}
-          </PressableButton>
-        </div>
-      </Card>
+        </Card>
+      )}
 
-      <Card>
-        <div className="flex items-center gap-3">
-          <div className="rounded-2xl bg-peach/20 p-2 ring-1 ring-black/5">
-            <ElderSticker className="h-11 w-11" tone="peach" />
+      {/* ── Parents list + Add parent (collapsed) ── */}
+      <SectionHead title="Parents you manage" section="parents" open={openSection === 'parents'} toggle={toggle} />
+      {openSection === 'parents' && (
+        <Card>
+          <div className="grid gap-2">
+            {(workspace?.managed_users || []).map((user) => {
+              const selected = user.user_id === activeUserId
+              return (
+                <button
+                  key={user.user_id}
+                  type="button"
+                  onClick={() => void load(user.user_id)}
+                  className={[
+                    'rounded-2xl p-2.5 text-left shadow-soft ring-1 ring-black/5 transition-colors',
+                    selected ? 'bg-mint/20' : 'bg-white/70 hover:bg-white/90',
+                  ].join(' ')}
+                >
+                  <p className="text-sm font-extrabold text-ink">{user.name}</p>
+                  <p className="text-sm text-ink/60">{user.user_id} | {user.language} | {user.city || user.region || 'Location not set'}</p>
+                </button>
+              )
+            })}
+            {!loading && (workspace?.managed_users?.length || 0) === 0 ? (
+              <p className="text-sm text-ink/60">No parent profile yet. Add the first one below.</p>
+            ) : null}
           </div>
-          <div>
-            <p className="text-lg font-extrabold tracking-tight text-ink">Parents you manage</p>
-            <p className="mt-1 text-sm text-ink/60">Select a registered parent first, then manage their medicines, reports, caretakers, and reminders below.</p>
-          </div>
-        </div>
-        <div className="mt-3 grid gap-2">
-          {(workspace?.managed_users || []).map((user) => {
-            const selected = user.user_id === activeUserId
-            return (
-              <button
-                key={user.user_id}
-                type="button"
-                onClick={() => void load(user.user_id)}
-                className={[
-                  'rounded-2xl p-3 text-left shadow-soft ring-1 ring-black/5 transition-colors',
-                  selected ? 'bg-mint/20' : 'bg-white/70 hover:bg-white/90',
-                ].join(' ')}
+
+          <p className="mt-3 text-sm font-extrabold tracking-tight text-ink">Add a parent profile</p>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            {([
+              ['Parent name', 'name'], ['Parent user ID', 'user_id'], ['Parent password', 'password'],
+              ['Optional email', 'email'], ['Age', 'age'], ['Region', 'region'],
+              ['City', 'city'], ['Origin', 'origin'], ['Phone', 'phone'],
+            ] as const).map(([label, key]) => (
+              <label key={key} className="block text-sm font-semibold text-ink/70">
+                <span>{label}</span>
+                <input
+                  type={key === 'password' ? 'password' : 'text'}
+                  value={parentForm[key]}
+                  onChange={(e) =>
+                    setParentForm((current) => ({
+                      ...current,
+                      [key]: key === 'user_id' ? normalizeParentUserId(e.target.value) : e.target.value,
+                    }))
+                  }
+                  className={INPUT_CLS}
+                />
+              </label>
+            ))}
+            <label className="block text-sm font-semibold text-ink/70">
+              <span>Regional language</span>
+              <select
+                value={parentForm.language}
+                onChange={(e) => setParentForm((current) => ({ ...current, language: e.target.value }))}
+                className={INPUT_CLS}
               >
-                <p className="text-sm font-extrabold text-ink">{user.name}</p>
-                <p className="mt-1 text-sm text-ink/60">{user.user_id} | {user.language} | {user.city || user.region || 'Location not set'}</p>
-              </button>
-            )
-          })}
-          {!loading && (workspace?.managed_users?.length || 0) === 0 ? (
-            <p className="text-sm text-ink/60">No parent profile yet. Add the first one below.</p>
-          ) : null}
-        </div>
-      </Card>
-
-      <Card>
-        <p className="text-lg font-extrabold tracking-tight text-ink">Add a parent profile</p>
-        <p className="mt-1 text-sm text-ink/60">You create each parent login here. Give them a unique user ID and password they can use on their own device.</p>
-        <div className="mt-3 grid gap-2 sm:grid-cols-2">
-          {[
-            ['Parent name', 'name'],
-            ['Parent user ID', 'user_id'],
-            ['Parent password', 'password'],
-            ['Optional email', 'email'],
-            ['Age', 'age'],
-            ['Region', 'region'],
-            ['City', 'city'],
-            ['Origin', 'origin'],
-            ['Phone', 'phone'],
-          ].map(([label, key]) => (
-            <label key={key} className="block text-sm font-semibold text-ink/70">
-              <span>{label}</span>
-              <input
-                type={key === 'password' ? 'password' : 'text'}
-                value={parentForm[key as keyof ParentForm]}
-                onChange={(e) =>
-                  setParentForm((current) => ({
-                    ...current,
-                    [key]: key === 'user_id' ? normalizeParentUserId(e.target.value) : e.target.value,
-                  }))
-                }
-                className="mt-1 w-full rounded-xl2 border-0 bg-white/75 px-3 py-3 text-base shadow-soft ring-1 ring-black/5"
-              />
+                {regionalLanguages.map((item) => (
+                  <option key={item} value={item}>{item}</option>
+                ))}
+              </select>
             </label>
-          ))}
-          <label className="block text-sm font-semibold text-ink/70">
-            <span>Regional language</span>
-            <select
-              value={parentForm.language}
-              onChange={(e) => setParentForm((current) => ({ ...current, language: e.target.value }))}
-              className="mt-1 w-full rounded-xl2 border-0 bg-white/75 px-3 py-3 text-base shadow-soft ring-1 ring-black/5"
-            >
-              {regionalLanguages.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block text-sm font-semibold text-ink/70">
-            <span>Wake time</span>
-            <input
-              value={parentForm.wake_time}
-              onChange={(e) => setParentForm((current) => ({ ...current, wake_time: e.target.value }))}
-              className="mt-1 w-full rounded-xl2 border-0 bg-white/75 px-3 py-3 text-base shadow-soft ring-1 ring-black/5"
-            />
-          </label>
-          <label className="block text-sm font-semibold text-ink/70">
-            <span>Sleep time</span>
-            <input
-              value={parentForm.sleep_time}
-              onChange={(e) => setParentForm((current) => ({ ...current, sleep_time: e.target.value }))}
-              className="mt-1 w-full rounded-xl2 border-0 bg-white/75 px-3 py-3 text-base shadow-soft ring-1 ring-black/5"
-            />
-          </label>
-        </div>
-        <div className="mt-3">
-          <PressableButton variant="primary" size="lg" onClick={() => void addParent()} disabled={savingParent}>
-            {savingParent ? 'Adding...' : 'Add parent'}
-          </PressableButton>
-        </div>
-      </Card>
+            <label className="block text-sm font-semibold text-ink/70">
+              <span>Wake time</span>
+              <input value={parentForm.wake_time} onChange={(e) => setParentForm((current) => ({ ...current, wake_time: e.target.value }))} className={INPUT_CLS} />
+            </label>
+            <label className="block text-sm font-semibold text-ink/70">
+              <span>Sleep time</span>
+              <input value={parentForm.sleep_time} onChange={(e) => setParentForm((current) => ({ ...current, sleep_time: e.target.value }))} className={INPUT_CLS} />
+            </label>
+          </div>
+          <div className="mt-2">
+            <PressableButton variant="primary" size="lg" onClick={() => void addParent()} disabled={savingParent}>
+              {savingParent ? 'Adding...' : 'Add parent'}
+            </PressableButton>
+          </div>
+        </Card>
+      )}
 
+      {/* ── Selected parent info + overview + preferences (always visible when parent selected) ── */}
       {active?.user ? (
         <>
           <Card>
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div>
                 <p className="text-xs font-black uppercase tracking-[0.22em] text-ink/45">Selected parent</p>
-                <p className="mt-2 text-2xl font-extrabold tracking-tight text-ink">{active.user.name}</p>
-                <p className="mt-2 text-sm text-ink/60">{active.user.user_id} | {active.user.age} years | {active.user.language} | {active.user.city || active.user.region || 'Location pending'}</p>
-                <p className="mt-1 text-sm text-ink/60">Wake {active.user.wake_time} | Sleep {active.user.sleep_time}</p>
+                <p className="mt-1 text-xl font-extrabold tracking-tight text-ink">{active.user.name}</p>
+                <p className="text-sm text-ink/60">
+                  {active.user.user_id} | {active.user.age}y | {active.user.language} | {active.user.city || active.user.region || 'Location pending'}
+                  {' | Wake '}{active.user.wake_time}{' | Sleep '}{active.user.sleep_time}
+                </p>
               </div>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <div className="grid grid-cols-4 gap-2">
                 {overviewStats.map((item) => (
-                  <div key={item.label} className="rounded-2xl bg-white/80 px-4 py-3 text-center shadow-soft ring-1 ring-black/5">
-                    <p className="text-xl font-extrabold text-ink">{item.value}</p>
-                    <p className="mt-1 text-xs font-semibold uppercase tracking-[0.18em] text-ink/50">{item.label}</p>
+                  <div key={item.label} className="rounded-2xl bg-white/80 px-3 py-2 text-center shadow-soft ring-1 ring-black/5">
+                    <p className="text-lg font-extrabold text-ink">{item.value}</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-ink/50">{item.label}</p>
                   </div>
                 ))}
               </div>
             </div>
-          </Card>
 
-          <Card>
-            <p className="text-lg font-extrabold tracking-tight text-ink">Quick management command</p>
-            <p className="mt-1 text-sm text-ink/60">Type things like "set alarm for 8 pm", "call support", "send SOS", or "play Ramayana for mom".</p>
-            <div className="mt-3 grid gap-2 sm:grid-cols-[1fr,auto]">
-              <input
-                value={commandText}
-                onChange={(e) => setCommandText(e.target.value)}
-                placeholder="Type one manager command"
-                className="rounded-xl2 border-0 bg-white/75 px-3 py-3 text-base shadow-soft ring-1 ring-black/5"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault()
-                    void runManagerCommand()
-                  }
-                }}
-              />
-              <PressableButton variant="primary" size="lg" onClick={() => void runManagerCommand()} disabled={commandBusy}>
-                {commandBusy ? 'Running...' : 'Run command'}
-              </PressableButton>
-            </div>
-          </Card>
-
-          <Card>
-            <p className="text-lg font-extrabold tracking-tight text-ink">Medicine adherence snapshot</p>
+            {/* Adherence snapshot inline */}
             <div className="mt-3 grid gap-2 sm:grid-cols-3">
-              <div className="rounded-2xl bg-white/75 p-3 shadow-soft ring-1 ring-black/5">
+              <div className="rounded-2xl bg-white/75 p-2.5 shadow-soft ring-1 ring-black/5">
                 <p className="text-sm font-semibold text-ink/60">Taken today</p>
-                <p className="mt-2 text-2xl font-extrabold text-ink">{adherenceStats.takenToday}</p>
+                <p className="text-xl font-extrabold text-ink">{adherenceStats.takenToday}</p>
               </div>
-              <div className="rounded-2xl bg-white/75 p-3 shadow-soft ring-1 ring-black/5">
+              <div className="rounded-2xl bg-white/75 p-2.5 shadow-soft ring-1 ring-black/5">
                 <p className="text-sm font-semibold text-ink/60">Missed today</p>
-                <p className="mt-2 text-2xl font-extrabold text-ink">{adherenceStats.missedToday}</p>
+                <p className="text-xl font-extrabold text-ink">{adherenceStats.missedToday}</p>
               </div>
-              <div className="rounded-2xl bg-white/75 p-3 shadow-soft ring-1 ring-black/5">
-                <p className="text-sm font-semibold text-ink/60">Last confirmed dose</p>
-                <p className="mt-2 text-sm font-extrabold text-ink">{adherenceStats.lastTakenLabel}</p>
+              <div className="rounded-2xl bg-white/75 p-2.5 shadow-soft ring-1 ring-black/5">
+                <p className="text-sm font-semibold text-ink/60">Last confirmed</p>
+                <p className="text-sm font-extrabold text-ink">{adherenceStats.lastTakenLabel}</p>
               </div>
             </div>
-          </Card>
 
-          <Card>
-            <p className="text-lg font-extrabold tracking-tight text-ink">Parent login recovery</p>
-            <p className="mt-1 text-sm text-ink/60">Reset the selected parent's password if they forget it.</p>
+            {/* Password reset inline */}
             <div className="mt-3 grid gap-2 sm:grid-cols-[1fr,auto]">
               <input
                 type="password"
                 value={parentPasswordDraft}
                 onChange={(e) => setParentPasswordDraft(e.target.value)}
                 placeholder={`New password for ${active.user.user_id}`}
-                className="rounded-xl2 border-0 bg-white/75 px-3 py-3 text-base shadow-soft ring-1 ring-black/5"
+                className={INPUT_CLS}
               />
-              <PressableButton variant="primary" size="lg" onClick={() => void submitParentPasswordReset()} disabled={parentPasswordBusy}>
+              <PressableButton variant="soft" size="md" onClick={() => void submitParentPasswordReset()} disabled={parentPasswordBusy}>
                 {parentPasswordBusy ? 'Updating...' : 'Reset password'}
               </PressableButton>
             </div>
-          </Card>
 
-          <Card>
-            <p className="text-lg font-extrabold tracking-tight text-ink">Food and preference notes</p>
-            <p className="mt-1 text-sm text-ink/60">Saving for {active.user.name}.</p>
-            <p className="mt-1 text-sm text-ink/60">Comma separated: meals, likes, dislikes, prayer habits, comfort items.</p>
-            <textarea
-              rows={4}
-              value={preferencesText}
-              onChange={(e) => setPreferencesText(e.target.value)}
-              className="mt-3 w-full rounded-xl2 border-0 bg-white/75 px-3 py-3 text-base shadow-soft ring-1 ring-black/5"
-            />
+            {/* Food preferences merged in */}
             <div className="mt-3">
-              <PressableButton variant="primary" size="lg" onClick={() => void saveCarePlan()} disabled={savingCarePlan}>
-                {savingCarePlan ? 'Saving...' : 'Save care plan'}
+              <p className="text-sm font-extrabold text-ink">Food and preference notes</p>
+              <textarea
+                rows={2}
+                value={preferencesText}
+                onChange={(e) => setPreferencesText(e.target.value)}
+                placeholder="Comma separated: meals, likes, dislikes, prayer habits, comfort items"
+                className="mt-1 w-full rounded-xl2 border-0 bg-white/75 px-3 py-2.5 text-base shadow-soft ring-1 ring-black/5"
+              />
+              <div className="mt-2">
+                <PressableButton variant="soft" size="md" onClick={() => void saveCarePlan()} disabled={savingCarePlan}>
+                  {savingCarePlan ? 'Saving...' : 'Save preferences'}
+                </PressableButton>
+              </div>
+            </div>
+          </Card>
+
+          {/* ── Quick command (always visible) ── */}
+          <Card>
+            <p className="text-sm font-extrabold tracking-tight text-ink">Quick command</p>
+            <div className="mt-2 grid gap-2 sm:grid-cols-[1fr,auto]">
+              <input
+                value={commandText}
+                onChange={(e) => setCommandText(e.target.value)}
+                placeholder="e.g. set alarm 8 pm, call support, send SOS"
+                className={INPUT_CLS}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void runManagerCommand() } }}
+              />
+              <PressableButton variant="primary" size="lg" onClick={() => void runManagerCommand()} disabled={commandBusy}>
+                {commandBusy ? 'Running...' : 'Run'}
               </PressableButton>
             </div>
           </Card>
 
-          <Card>
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="rounded-2xl bg-sky/15 p-2 ring-1 ring-black/5">
-                  <PillSticker className="h-11 w-11" />
-                </div>
-                <div>
-                  <p className="text-lg font-extrabold tracking-tight text-ink">Medicine plan</p>
-                  <p className="mt-1 text-sm text-ink/60">Saving for {active.user.name}.</p>
-                  <p className="mt-1 text-sm text-ink/60">Bhumi reads these reminders and the parent can confirm from the app.</p>
-                </div>
+          {/* ── Medicine plan (collapsed) ── */}
+          <SectionHead title="Medicine plan" section="medicine" open={openSection === 'medicine'} toggle={toggle} />
+          {openSection === 'medicine' && (
+            <Card>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm text-ink/60">Saving for {active.user.name}. Bhumi reads these reminders aloud.</p>
+                <PressableButton variant="soft" size="md" onClick={() => setMedicines((current) => [...current, blankMedicine()])}>
+                  Add row
+                </PressableButton>
               </div>
-              <PressableButton variant="soft" size="md" onClick={() => setMedicines((current) => [...current, blankMedicine()])}>
-                Add row
-              </PressableButton>
-            </div>
-            <div className="mt-3 space-y-3">
-              {medicines.map((item, index) => (
-                <div key={item.id || index} className="rounded-2xl bg-white/70 p-3 shadow-soft ring-1 ring-black/5">
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {[
-                      ['Name', 'name'],
-                      ['Dose', 'dose'],
-                      ['Instructions', 'instructions'],
-                      ['Condition', 'condition'],
-                    ].map(([label, key]) => (
-                      <label key={key} className="block text-sm font-semibold text-ink/70">
-                        <span>{label}</span>
+              <div className="mt-2 space-y-2">
+                {medicines.map((item, index) => (
+                  <div key={item.id || index} className="rounded-2xl bg-white/70 p-2.5 shadow-soft ring-1 ring-black/5">
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {([['Name', 'name'], ['Dose', 'dose'], ['Instructions', 'instructions'], ['Condition', 'condition']] as const).map(([label, key]) => (
+                        <label key={key} className="block text-sm font-semibold text-ink/70">
+                          <span>{label}</span>
+                          <input
+                            value={String(item[key as keyof MedicineItem] || '')}
+                            onChange={(e) =>
+                              setMedicines((current) =>
+                                current.map((med, medIndex) => (medIndex === index ? { ...med, [key]: e.target.value } : med)),
+                              )
+                            }
+                            className={INPUT_CLS}
+                          />
+                        </label>
+                      ))}
+                      <label className="block text-sm font-semibold text-ink/70">
+                        <span>Times</span>
                         <input
-                          value={String(item[key as keyof MedicineItem] || '')}
+                          value={(item.times || []).join(', ')}
                           onChange={(e) =>
                             setMedicines((current) =>
-                              current.map((med, medIndex) => (medIndex === index ? { ...med, [key]: e.target.value } : med)),
+                              current.map((med, medIndex) =>
+                                medIndex === index
+                                  ? { ...med, times: e.target.value.split(',').map((time) => time.trim()).filter(Boolean) }
+                                  : med,
+                              ),
                             )
                           }
-                          className="mt-1 w-full rounded-xl2 border-0 bg-white/80 px-3 py-3 text-base shadow-soft ring-1 ring-black/5"
+                          placeholder="08:00, 20:00"
+                          className={INPUT_CLS}
                         />
                       </label>
-                    ))}
-                    <label className="block text-sm font-semibold text-ink/70">
-                      <span>Times</span>
-                      <input
-                        value={(item.times || []).join(', ')}
-                        onChange={(e) =>
-                          setMedicines((current) =>
-                            current.map((med, medIndex) =>
-                              medIndex === index
-                                ? { ...med, times: e.target.value.split(',').map((time) => time.trim()).filter(Boolean) }
-                                : med,
-                            ),
-                          )
-                        }
-                        placeholder="08:00, 20:00"
-                        className="mt-1 w-full rounded-xl2 border-0 bg-white/80 px-3 py-3 text-base shadow-soft ring-1 ring-black/5"
-                      />
-                    </label>
+                    </div>
+                    <div className="mt-2">
+                      <PressableButton variant="soft" size="md" onClick={() => setMedicines((current) => current.filter((_, medIndex) => medIndex !== index))}>
+                        Remove
+                      </PressableButton>
+                    </div>
                   </div>
-                  <div className="mt-3">
-                    <PressableButton
-                      variant="soft"
-                      size="md"
-                      onClick={() => setMedicines((current) => current.filter((_, medIndex) => medIndex !== index))}
-                    >
-                      Remove
-                    </PressableButton>
-                  </div>
-                </div>
-              ))}
-              {!medicines.length ? <p className="text-sm text-ink/60">No medicines added yet.</p> : null}
-            </div>
-            <div className="mt-3">
-              <PressableButton variant="primary" size="lg" onClick={() => void saveMedicinePlan()} disabled={savingMedicine}>
-                {savingMedicine ? 'Saving...' : 'Save medicines'}
-              </PressableButton>
-            </div>
-          </Card>
+                ))}
+                {!medicines.length ? <p className="text-sm text-ink/60">No medicines added yet.</p> : null}
+              </div>
+              <div className="mt-2">
+                <PressableButton variant="primary" size="lg" onClick={() => void saveMedicinePlan()} disabled={savingMedicine}>
+                  {savingMedicine ? 'Saving...' : 'Save medicines'}
+                </PressableButton>
+              </div>
+            </Card>
+          )}
 
+          {/* ── Imported medicines review (shows automatically when pending) ── */}
           {pendingReportReview ? (
             <Card>
-              <div className="flex items-center gap-3">
-                <div className="rounded-2xl bg-peach/20 p-2 ring-1 ring-black/5">
-                  <PillSticker className="h-10 w-10" />
-                </div>
-                <div>
-                  <p className="text-lg font-extrabold tracking-tight text-ink">Imported medicines review</p>
-                  <p className="mt-1 text-sm text-ink/60">Review suggestions from {pendingReportReview.reportName} before they are added to the live medicine plan.</p>
-                </div>
-              </div>
-              <div className="mt-3 space-y-3">
+              <p className="text-sm font-extrabold tracking-tight text-ink">Imported medicines review</p>
+              <p className="text-sm text-ink/60">From {pendingReportReview.reportName} -- review before going live.</p>
+              <div className="mt-2 space-y-2">
                 {pendingReportReview.medicines.map((item, index) => (
-                  <div key={item.id || index} className="rounded-2xl bg-white/75 p-3 shadow-soft ring-1 ring-black/5">
-                    <div className="flex items-center justify-between gap-3">
+                  <div key={item.id || index} className="rounded-2xl bg-white/75 p-2.5 shadow-soft ring-1 ring-black/5">
+                    <div className="flex items-center justify-between gap-2">
                       <p className="text-sm font-extrabold text-ink">{item.name || `Imported medicine ${index + 1}`}</p>
                       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-ink/45">
-                        {item.times?.length ? 'timed suggestion' : 'needs timing review'}
+                        {item.times?.length ? 'timed' : 'needs timing'}
                       </p>
                     </div>
-                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                      {[
-                        ['Name', 'name'],
-                        ['Dose', 'dose'],
-                        ['Instructions', 'instructions'],
-                        ['Condition', 'condition'],
-                      ].map(([label, key]) => (
+                    <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                      {([['Name', 'name'], ['Dose', 'dose'], ['Instructions', 'instructions'], ['Condition', 'condition']] as const).map(([label, key]) => (
                         <label key={key} className="block text-sm font-semibold text-ink/70">
                           <span>{label}</span>
                           <input
@@ -1045,7 +1000,7 @@ export function CaregiverPage() {
                                   : current,
                               )
                             }
-                            className="mt-1 w-full rounded-xl2 border-0 bg-white px-3 py-3 text-base shadow-soft ring-1 ring-black/5"
+                            className={INPUT_CLS}
                           />
                         </label>
                       ))}
@@ -1068,19 +1023,17 @@ export function CaregiverPage() {
                             )
                           }
                           placeholder="08:00, 20:00"
-                          className="mt-1 w-full rounded-xl2 border-0 bg-white px-3 py-3 text-base shadow-soft ring-1 ring-black/5"
+                          className={INPUT_CLS}
                         />
                       </label>
                     </div>
-                    <div className="mt-3">
+                    <div className="mt-2">
                       <PressableButton
                         variant="soft"
                         size="md"
                         onClick={() =>
                           setPendingReportReview((current) =>
-                            current
-                              ? { ...current, medicines: current.medicines.filter((_, medIndex) => medIndex !== index) }
-                              : current,
+                            current ? { ...current, medicines: current.medicines.filter((_, medIndex) => medIndex !== index) } : current,
                           )
                         }
                       >
@@ -1090,7 +1043,7 @@ export function CaregiverPage() {
                   </div>
                 ))}
               </div>
-              <div className="mt-3 grid grid-cols-2 gap-2">
+              <div className="mt-2 grid grid-cols-2 gap-2">
                 <PressableButton variant="soft" size="lg" onClick={() => void rejectReportImport()} disabled={reportBusy}>
                   {reportBusy ? 'Working...' : 'Reject import'}
                 </PressableButton>
@@ -1101,119 +1054,99 @@ export function CaregiverPage() {
             </Card>
           ) : null}
 
-          <Card>
-            <p className="text-lg font-extrabold tracking-tight text-ink">Add caretaker login</p>
-            <p className="mt-1 text-sm text-ink/60">This caretaker will be linked to {active.user.name}.</p>
-            <p className="mt-1 text-sm text-ink/60">Create extra logins for the selected parent only.</p>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              {[
-                ['Name', 'name'],
-                ['Email', 'email'],
-                ['Password', 'password'],
-                ['Phone', 'phone'],
-                ['Relation', 'relation'],
-              ].map(([label, key]) => (
-                <label key={key} className="block text-sm font-semibold text-ink/70">
-                  <span>{label}</span>
-                  <input
-                    type={key === 'password' ? 'password' : 'text'}
-                    value={caretakerForm[key as keyof CaretakerForm]}
-                    onChange={(e) => setCaretakerForm((current) => ({ ...current, [key]: e.target.value }))}
-                    className="mt-1 w-full rounded-xl2 border-0 bg-white/75 px-3 py-3 text-base shadow-soft ring-1 ring-black/5"
-                  />
-                </label>
-              ))}
-            </div>
-            <div className="mt-3">
-              <PressableButton variant="primary" size="lg" onClick={() => void addCaretaker()} disabled={savingCaretaker}>
-                {savingCaretaker ? 'Creating...' : 'Create caretaker login'}
-              </PressableButton>
-            </div>
-          </Card>
+          {/* ── Add caretaker (collapsed) ── */}
+          <SectionHead title="Add caretaker" section="caretaker" open={openSection === 'caretaker'} toggle={toggle} />
+          {openSection === 'caretaker' && (
+            <Card>
+              <p className="text-sm text-ink/60">Linked to {active.user.name}.</p>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                {([['Name', 'name'], ['Email', 'email'], ['Password', 'password'], ['Phone', 'phone'], ['Relation', 'relation']] as const).map(([label, key]) => (
+                  <label key={key} className="block text-sm font-semibold text-ink/70">
+                    <span>{label}</span>
+                    <input
+                      type={key === 'password' ? 'password' : 'text'}
+                      value={caretakerForm[key]}
+                      onChange={(e) => setCaretakerForm((current) => ({ ...current, [key]: e.target.value }))}
+                      className={INPUT_CLS}
+                    />
+                  </label>
+                ))}
+              </div>
+              <div className="mt-2">
+                <PressableButton variant="primary" size="lg" onClick={() => void addCaretaker()} disabled={savingCaretaker}>
+                  {savingCaretaker ? 'Creating...' : 'Create caretaker login'}
+                </PressableButton>
+              </div>
+            </Card>
+          )}
 
-          <Card>
-            <div className="flex items-center gap-3">
-              <div className="rounded-2xl bg-peach/20 p-2 ring-1 ring-black/5">
-                <BellSticker className="h-10 w-10" />
+          {/* ── Reminders & urgent (collapsed) ── */}
+          <SectionHead title="Reminders & urgent contact" section="reminders" open={openSection === 'reminders'} toggle={toggle} />
+          {openSection === 'reminders' && (
+            <Card>
+              <div className="grid gap-2 sm:grid-cols-[1fr,160px,auto]">
+                <input
+                  value={reminderTitle}
+                  onChange={(e) => setReminderTitle(e.target.value)}
+                  className={INPUT_CLS}
+                  placeholder="Reminder label"
+                />
+                <input
+                  type="time"
+                  value={reminderTime}
+                  onChange={(e) => setReminderTime(e.target.value)}
+                  className={INPUT_CLS}
+                />
+                <PressableButton variant="primary" size="lg" onClick={() => void addReminder()}>
+                  Add reminder
+                </PressableButton>
               </div>
-              <div>
-                <p className="text-lg font-extrabold tracking-tight text-ink">Reminders and urgent contact</p>
-                <p className="mt-1 text-sm text-ink/60">These reminders and urgent actions will go to {active.user.name} and their linked support chain.</p>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <PressableButton variant="soft" size="lg" onClick={() => void callSupportChain()}>
+                  Call support chain
+                </PressableButton>
+                <PressableButton variant="soft" size="lg" onClick={() => void runWhatsAppTest()} disabled={whatsAppBusy}>
+                  {whatsAppBusy ? 'Testing...' : 'Test WhatsApp'}
+                </PressableButton>
               </div>
-            </div>
-            <div className="mt-3 grid gap-2 sm:grid-cols-[1fr,160px,auto]">
-              <input
-                value={reminderTitle}
-                onChange={(e) => setReminderTitle(e.target.value)}
-                className="rounded-xl2 border-0 bg-white/75 px-3 py-3 text-base shadow-soft ring-1 ring-black/5"
-                placeholder="Reminder label"
-              />
-              <input
-                type="time"
-                value={reminderTime}
-                onChange={(e) => setReminderTime(e.target.value)}
-                className="rounded-xl2 border-0 bg-white/75 px-3 py-3 text-base shadow-soft ring-1 ring-black/5"
-              />
-              <PressableButton variant="primary" size="lg" onClick={() => void addReminder()}>
-                Add reminder
-              </PressableButton>
-            </div>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <PressableButton variant="soft" size="lg" onClick={() => void callSupportChain()}>
-                Call support chain
-              </PressableButton>
-              <PressableButton variant="soft" size="lg" onClick={() => void runWhatsAppTest()} disabled={whatsAppBusy}>
-                {whatsAppBusy ? 'Testing...' : 'Test WhatsApp'}
-              </PressableButton>
-            </div>
-            <div className="mt-3 space-y-2">
-              {upcomingAlarms.map((alarm: AlarmItem) => (
-                <div key={alarm.id} className="rounded-2xl bg-white/70 p-3 shadow-soft ring-1 ring-black/5">
-                  <p className="text-sm font-extrabold text-ink">{alarm.title}</p>
-                  <p className="mt-1 text-sm text-ink/60">{new Date(alarm.time_iso).toLocaleString()}</p>
-                </div>
-              ))}
-              {!upcomingAlarms.length ? <p className="text-sm text-ink/60">No upcoming reminders yet.</p> : null}
-            </div>
-          </Card>
+              <div className="mt-2 space-y-1">
+                {upcomingAlarms.map((alarm: AlarmItem) => (
+                  <div key={alarm.id} className="rounded-2xl bg-white/70 p-2.5 shadow-soft ring-1 ring-black/5">
+                    <p className="text-sm font-extrabold text-ink">{alarm.title}</p>
+                    <p className="text-sm text-ink/60">{new Date(alarm.time_iso).toLocaleString()}</p>
+                  </div>
+                ))}
+                {!upcomingAlarms.length ? <p className="text-sm text-ink/60">No upcoming reminders yet.</p> : null}
+              </div>
+            </Card>
+          )}
 
-          <Card>
-            <div className="flex items-center gap-3">
-              <div className="rounded-2xl bg-sky/15 p-2 ring-1 ring-black/5">
-                <HeartPulseSticker className="h-10 w-10" />
-              </div>
-              <div>
-                <p className="text-lg font-extrabold tracking-tight text-ink">Scan medical report</p>
-                <p className="mt-1 text-sm text-ink/60">Importing for {active.user.name}.</p>
-                <p className="mt-1 text-sm text-ink/60">
-                  Add a photo from the camera or gallery. Bhumi extracts the report text, stores the image, and prepares a simple summary.
-                </p>
-              </div>
-            </div>
-            <label className="mt-3 flex cursor-pointer items-center justify-center rounded-2xl border border-dashed border-ink/15 bg-white/70 px-4 py-6 text-sm font-semibold text-ink/70 shadow-soft">
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0]
-                  if (file) void uploadReport(file)
-                  e.currentTarget.value = ''
-                }}
-              />
-              {reportBusy ? 'Scanning report...' : 'Choose or capture report image'}
-            </label>
-            <div className="mt-3 space-y-3">
-              {(active.reports || []).map((report) => (
-                <div key={report.id} className="rounded-2xl bg-white/70 p-3 shadow-soft ring-1 ring-black/5">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-sm font-extrabold text-ink">{report.file_name}</p>
-                      <p className="mt-1 text-xs font-semibold tracking-wide text-ink/55">
-                        {new Date(report.created_at).toLocaleString()}
-                      </p>
-                    </div>
+          {/* ── Scan report (collapsed) ── */}
+          <SectionHead title="Scan medical report" section="report" open={openSection === 'report'} toggle={toggle} />
+          {openSection === 'report' && (
+            <Card>
+              <label className="flex cursor-pointer items-center justify-center rounded-2xl border border-dashed border-ink/15 bg-white/70 px-4 py-4 text-sm font-semibold text-ink/70 shadow-soft">
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (file) void uploadReport(file)
+                    e.currentTarget.value = ''
+                  }}
+                />
+                {reportBusy ? 'Scanning report...' : 'Choose or capture report image'}
+              </label>
+              <div className="mt-2 space-y-2">
+                {(active.reports || []).map((report) => (
+                  <div key={report.id} className="rounded-2xl bg-white/70 p-2.5 shadow-soft ring-1 ring-black/5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-extrabold text-ink">{report.file_name}</p>
+                        <p className="text-xs font-semibold tracking-wide text-ink/55">{new Date(report.created_at).toLocaleString()}</p>
+                      </div>
                       <PressableButton
                         variant="soft"
                         size="md"
@@ -1222,138 +1155,126 @@ export function CaregiverPage() {
                         Delete
                       </PressableButton>
                     </div>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <PressableButton
-                        variant="soft"
-                        size="md"
-                        onClick={() => void sendReportSummary(report.id, report.file_name)}
-                        disabled={reportBusy}
-                      >
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <PressableButton variant="soft" size="md" onClick={() => void sendReportSummary(report.id, report.file_name)} disabled={reportBusy}>
                         {reportBusy ? 'Sending...' : 'Send analysis'}
                       </PressableButton>
                     </div>
-                  {report.image_data_url ? (
-                    <img src={report.image_data_url} alt={report.file_name} className="mt-3 h-40 w-full rounded-2xl object-cover ring-1 ring-black/5" />
-                  ) : null}
-                  <p className="mt-3 text-sm font-extrabold text-ink">Summary</p>
-                  <p className="mt-1 text-sm text-ink/70">{report.summary || 'No summary yet.'}</p>
-                  <p className="mt-3 text-sm font-extrabold text-ink">Advice</p>
-                  <p className="mt-1 text-sm text-ink/70">{report.advice || 'No advice yet.'}</p>
-                </div>
-              ))}
-              {!active.reports.length ? <p className="text-sm text-ink/60">No saved reports yet.</p> : null}
-            </div>
-          </Card>
+                    {report.image_data_url ? (
+                      <img src={report.image_data_url} alt={report.file_name} className="mt-2 h-32 w-full rounded-2xl object-cover ring-1 ring-black/5" />
+                    ) : null}
+                    <p className="mt-2 text-sm font-extrabold text-ink">Summary</p>
+                    <p className="text-sm text-ink/70">{report.summary || 'No summary yet.'}</p>
+                    <p className="mt-1 text-sm font-extrabold text-ink">Advice</p>
+                    <p className="text-sm text-ink/70">{report.advice || 'No advice yet.'}</p>
+                  </div>
+                ))}
+                {!active.reports.length ? <p className="text-sm text-ink/60">No saved reports yet.</p> : null}
+              </div>
+            </Card>
+          )}
 
-          <Card>
-            <div className="flex items-center gap-3">
-              <div className="rounded-2xl bg-mint/15 p-2 ring-1 ring-black/5">
-                <FamilySticker className="h-10 w-10" tone="mint" />
+          {/* ── Support circle (collapsed) ── */}
+          <SectionHead title="Support circle" section="support" open={openSection === 'support'} toggle={toggle} />
+          {openSection === 'support' && (
+            <Card>
+              <div className="space-y-2">
+                {(active.support_contacts || []).map((item, index) => (
+                  <div key={`${item.id || item.phone}-${index}`} className="rounded-2xl bg-white/70 p-2.5 shadow-soft ring-1 ring-black/5">
+                    <p className="text-sm font-extrabold text-ink">{item.name}</p>
+                    <p className="text-sm text-ink/60">{item.role}{item.phone ? ` | ${item.phone}` : ''}</p>
+                    {item.id !== 'primary-support' ? (
+                      <>
+                        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                          {([['Name', 'name'], ['Relation', 'relation'], ['Phone', 'phone'], ['Email', 'email'], ['New password', 'password']] as const).map(([label, key]) => (
+                            <label key={key} className="block text-sm font-semibold text-ink/70">
+                              <span>{label}</span>
+                              <input
+                                type={key === 'password' ? 'password' : 'text'}
+                                value={supportDrafts[item.id || `${item.name}-${index}`]?.[key] || ''}
+                                onChange={(e) =>
+                                  setSupportDrafts((current) => ({
+                                    ...current,
+                                    [item.id || `${item.name}-${index}`]: {
+                                      ...(current[item.id || `${item.name}-${index}`] || {
+                                        name: item.name || '',
+                                        relation: item.relation || item.role || '',
+                                        phone: item.phone || '',
+                                        email: item.email || '',
+                                        password: '',
+                                      }),
+                                      [key]: e.target.value,
+                                    },
+                                  }))
+                                }
+                                className={INPUT_CLS}
+                              />
+                            </label>
+                          ))}
+                        </div>
+                        <div className="mt-2 grid grid-cols-2 gap-2">
+                          <PressableButton
+                            variant="soft"
+                            size="md"
+                            onClick={() => void removeSupportMember(item.id || `${item.name}-${index}`)}
+                            disabled={supportActionBusy === `delete:${item.id || `${item.name}-${index}`}`}
+                          >
+                            {supportActionBusy === `delete:${item.id || `${item.name}-${index}`}` ? 'Removing...' : 'Remove'}
+                          </PressableButton>
+                          <PressableButton
+                            variant="primary"
+                            size="md"
+                            onClick={() => void saveSupportMember(item.id || `${item.name}-${index}`)}
+                            disabled={supportActionBusy === `save:${item.id || `${item.name}-${index}`}`}
+                          >
+                            {supportActionBusy === `save:${item.id || `${item.name}-${index}`}` ? 'Saving...' : 'Save changes'}
+                          </PressableButton>
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
+                ))}
               </div>
-              <div>
-                <p className="text-lg font-extrabold tracking-tight text-ink">Live support circle</p>
-                <p className="mt-1 text-sm text-ink/60">Edit linked support people, change their phone/email, or remove them from this parent.</p>
-              </div>
-            </div>
-            <div className="mt-3 space-y-3">
-              {(active.support_contacts || []).map((item, index) => (
-                <div key={`${item.id || item.phone}-${index}`} className="rounded-2xl bg-white/70 p-3 shadow-soft ring-1 ring-black/5">
-                  <p className="text-sm font-extrabold text-ink">{item.name}</p>
-                  <p className="mt-1 text-sm text-ink/60">{item.role}{item.phone ? ` | ${item.phone}` : ''}</p>
-                  {item.id !== 'primary-support' ? (
-                    <>
-                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                        {[
-                          ['Name', 'name'],
-                          ['Relation', 'relation'],
-                          ['Phone', 'phone'],
-                          ['Email', 'email'],
-                          ['New password', 'password'],
-                        ].map(([label, key]) => (
-                          <label key={key} className="block text-sm font-semibold text-ink/70">
-                            <span>{label}</span>
-                            <input
-                              type={key === 'password' ? 'password' : 'text'}
-                              value={supportDrafts[item.id || `${item.name}-${index}`]?.[key as 'name' | 'relation' | 'phone' | 'email' | 'password'] || ''}
-                              onChange={(e) =>
-                                setSupportDrafts((current) => ({
-                                  ...current,
-                                  [item.id || `${item.name}-${index}`]: {
-                                    ...(current[item.id || `${item.name}-${index}`] || {
-                                      name: item.name || '',
-                                      relation: item.relation || item.role || '',
-                                      phone: item.phone || '',
-                                      email: item.email || '',
-                                      password: '',
-                                    }),
-                                    [key]: e.target.value,
-                                  },
-                                }))
-                              }
-                              className="mt-1 w-full rounded-xl2 border-0 bg-white px-3 py-3 text-base shadow-soft ring-1 ring-black/5"
-                            />
-                          </label>
-                        ))}
+            </Card>
+          )}
+
+          {/* ── Activity log: alerts + family activity merged (collapsed) ── */}
+          <SectionHead title="Activity log" section="activity" open={openSection === 'activity'} toggle={toggle} />
+          {openSection === 'activity' && (
+            <Card>
+              {/* Recent alerts */}
+              {(active.alerts || []).length > 0 && (
+                <>
+                  <p className="text-sm font-extrabold text-ink">Recent alerts</p>
+                  <div className="mt-1 space-y-1">
+                    {(active.alerts || []).slice().reverse().slice(0, 6).map((item, index) => (
+                      <div key={`${item.time_created}-${index}`} className="rounded-2xl bg-white/70 p-2.5 shadow-soft ring-1 ring-black/5">
+                        <p className="text-sm font-extrabold text-ink">{item.type} | severity {item.severity}</p>
+                        <p className="text-sm text-ink/60">{item.message}</p>
                       </div>
-                      <div className="mt-3 grid grid-cols-2 gap-2">
-                        <PressableButton
-                          variant="soft"
-                          size="md"
-                          onClick={() => void removeSupportMember(item.id || `${item.name}-${index}`)}
-                          disabled={supportActionBusy === `delete:${item.id || `${item.name}-${index}`}`}
-                        >
-                          {supportActionBusy === `delete:${item.id || `${item.name}-${index}`}` ? 'Removing...' : 'Remove'}
-                        </PressableButton>
-                        <PressableButton
-                          variant="primary"
-                          size="md"
-                          onClick={() => void saveSupportMember(item.id || `${item.name}-${index}`)}
-                          disabled={supportActionBusy === `save:${item.id || `${item.name}-${index}`}`}
-                        >
-                          {supportActionBusy === `save:${item.id || `${item.name}-${index}`}` ? 'Saving...' : 'Save changes'}
-                        </PressableButton>
-                      </div>
-                    </>
-                  ) : null}
-                </div>
-              ))}
-            </div>
-          </Card>
+                    ))}
+                  </div>
+                </>
+              )}
 
-          <Card>
-            <p className="text-lg font-extrabold tracking-tight text-ink">Recent alerts</p>
-            <div className="mt-3 space-y-2">
-              {(active.alerts || []).slice().reverse().slice(0, 6).map((item, index) => (
-                <div key={`${item.time_created}-${index}`} className="rounded-2xl bg-white/70 p-3 shadow-soft ring-1 ring-black/5">
-                  <p className="text-sm font-extrabold text-ink">{item.type} | severity {item.severity}</p>
-                  <p className="mt-1 text-sm text-ink/60">{item.message}</p>
-                </div>
-              ))}
-              {!active.alerts.length ? <p className="text-sm text-ink/60">No alerts yet.</p> : null}
-            </div>
-          </Card>
-
-          <Card>
-            <div className="flex items-center gap-3">
-              <div className="rounded-2xl bg-peach/20 p-2 ring-1 ring-black/5">
-                <SparkleSticker className="h-10 w-10" />
+              {/* Family activity */}
+              <p className={`text-sm font-extrabold text-ink${(active.alerts || []).length > 0 ? ' mt-3' : ''}`}>Family activity</p>
+              <div className="mt-1 space-y-1">
+                {recentAudit.map((item) => (
+                  <div key={item.id} className="rounded-2xl bg-white/70 p-2.5 shadow-soft ring-1 ring-black/5">
+                    <p className="text-sm font-extrabold text-ink">{item.summary}</p>
+                    <p className="text-sm text-ink/60">
+                      {item.actor_name || 'Family Hub'}
+                      {item.actor_role ? ` | ${item.actor_role}` : ''}
+                      {item.created_at ? ` | ${new Date(item.created_at).toLocaleString()}` : ''}
+                    </p>
+                  </div>
+                ))}
+                {!recentAudit.length && !active.alerts.length ? <p className="text-sm text-ink/60">No activity yet.</p> : null}
+                {!recentAudit.length && (active.alerts || []).length > 0 ? <p className="text-sm text-ink/60">No management updates yet.</p> : null}
               </div>
-              <p className="text-lg font-extrabold tracking-tight text-ink">Family activity</p>
-            </div>
-            <div className="mt-3 space-y-2">
-              {recentAudit.map((item) => (
-                <div key={item.id} className="rounded-2xl bg-white/70 p-3 shadow-soft ring-1 ring-black/5">
-                  <p className="text-sm font-extrabold text-ink">{item.summary}</p>
-                  <p className="mt-1 text-sm text-ink/60">
-                    {item.actor_name || 'Family Hub'}
-                    {item.actor_role ? ` | ${item.actor_role}` : ''}
-                    {item.created_at ? ` | ${new Date(item.created_at).toLocaleString()}` : ''}
-                  </p>
-                </div>
-              ))}
-              {!recentAudit.length ? <p className="text-sm text-ink/60">No management updates yet.</p> : null}
-            </div>
-          </Card>
+            </Card>
+          )}
         </>
       ) : null}
     </AppShell>

@@ -9,6 +9,7 @@ from fastapi import FastAPI
 
 
 AI_SERVICE_URL = os.getenv("AI_SERVICE_URL", "http://127.0.0.1:8001")
+DATA_SERVICE_URL = os.getenv("DATA_SERVICE_URL", "http://127.0.0.1:8002")
 DEMO_FAST_SCHEDULE = os.getenv("DEMO_FAST_SCHEDULE", "1") == "1"
 
 CHECKIN_VARIATIONS = [
@@ -54,9 +55,22 @@ async def _bedtime_prompt():
 
 
 async def _weekly_report_ping():
-    data_service_url = os.getenv("DATA_SERVICE_URL", "http://127.0.0.1:8002")
     async with httpx.AsyncClient(timeout=20) as client:
-        await client.get(f"{data_service_url}/weekly-report/demo")
+        await client.get(f"{DATA_SERVICE_URL}/weekly-report/demo")
+
+
+async def _sync_medicine_reminders():
+    """Re-sync medicine reminders for all users so alarms repeat daily."""
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            users_res = await client.get(f"{DATA_SERVICE_URL}/users")
+            users = (users_res.json() or {}).get("users") or []
+            for user in users:
+                user_id = user.get("user_id") or ""
+                if user_id:
+                    await client.post(f"{DATA_SERVICE_URL}/medicine/{user_id}/sync-reminders")
+    except Exception:
+        pass
 
 
 @app.on_event("startup")
@@ -68,6 +82,7 @@ async def _startup():
         sched.add_job(_morning_greeting, "interval", minutes=11, id="morning_demo")
         sched.add_job(_evening_check, "interval", minutes=13, id="evening_demo")
         sched.add_job(_bedtime_prompt, "interval", minutes=17, id="bedtime_demo")
+        sched.add_job(_sync_medicine_reminders, "interval", minutes=9, id="medsync_demo")
     else:
         sched.add_job(_poke_checkin, "interval", hours=2, id="checkin_2h")
         sched.add_job(_cultural_prompt, "cron", hour=15, minute=0, id="cultural_3pm")
@@ -75,6 +90,7 @@ async def _startup():
         sched.add_job(_morning_greeting, "cron", hour=7, minute=0, id="morning_7am")
         sched.add_job(_evening_check, "cron", hour=18, minute=0, id="evening_6pm")
         sched.add_job(_bedtime_prompt, "cron", hour=21, minute=0, id="bedtime_9pm")
+        sched.add_job(_sync_medicine_reminders, "cron", hour=0, minute=5, id="medsync_daily")
     sched.start()
 
 
