@@ -13,7 +13,7 @@ yarn-error.log*
 pnpm-debug.log*
 *.log
 
-# Editor
+# Editor / tools
 .vscode/
 .idea/
 .claude/
@@ -23,19 +23,24 @@ pnpm-debug.log*
 .env.*
 !.env.example
 
-extra_stuffs
-
 # Credentials / secrets
 **/*firebase-adminsdk*.json
 
-# Python cache
+# Python
 __pycache__/
 *.pyc
+.venv/
 
-# Generated voice media
+# Generated media
 backend_media/
 services/ai_service/media/
 
 # Local fallback data store
 data_store/*.json
-.claude/
+
+# Runtime artifacts
+.run-logs/
+.smoke-test-data/
+
+# Legacy monolith (superseded by services/)
+backend/

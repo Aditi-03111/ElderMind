@@ -768,9 +768,30 @@ async def analyze_rppg(request: Request):
         return JSONResponse(status_code=500, content={"status": "error", "message": message})
 
     plot_url = f"{settings.base_url}/media/{result['plot_file']}"
+    bpm = result["bpm"]
+    sqi = result["sqi"]
+
+    # Build detailed quality feedback
+    quality_issues: list[str] = []
+    if sqi < 0.15:
+        quality_label = "Very Low"
+        quality_issues.append("The signal was very weak — the face may not have been clearly visible.")
+        quality_issues.append("Try with brighter, even lighting directly on your face.")
+        quality_issues.append("Hold the phone steady and keep your face still for the full recording.")
+    elif sqi < 0.4:
+        quality_label = "Low"
+        quality_issues.append("The signal was weak. Try better lighting and hold steady.")
+    elif sqi < 0.65:
+        quality_label = "Fair"
+        quality_issues.append("Decent capture — a steadier position or brighter light would improve it.")
+    else:
+        quality_label = "Good"
+
+    match_pct = min(round(sqi * 100), 100)
+
     note = (
-        f"Experimental camera wellness check estimated pulse near {round(result['bpm'])} BPM "
-        f"with signal quality {result['sqi']:.2f}. This is not a medical reading."
+        f"Experimental camera wellness check estimated pulse near {round(bpm)} BPM. "
+        f"Signal quality: {quality_label} ({match_pct}% match). This is not a medical reading."
     )
 
     if user_id:
@@ -823,13 +844,16 @@ async def analyze_rppg(request: Request):
 
     return {
         "status": "success",
-        "bpm": result["bpm"],
-        "sqi": result["sqi"],
+        "bpm": bpm,
+        "sqi": sqi,
         "hrv": result["hrv"],
         "raw_bvp": result["raw_bvp"],
         "timestamps": result["timestamps"],
         "plot_url": plot_url,
         "note": note,
+        "quality_label": quality_label,
+        "match_pct": match_pct,
+        "quality_issues": quality_issues,
         "medical_notice": "Experimental camera wellness check only. Do not use for diagnosis or emergency decisions.",
     }
 

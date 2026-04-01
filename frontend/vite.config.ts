@@ -15,6 +15,7 @@ export default defineConfig({
         culture: path.resolve(__dirname, 'culture.html'),
         support: path.resolve(__dirname, 'support.html'),
         caregiver: path.resolve(__dirname, 'caregiver.html'),
+        settings: path.resolve(__dirname, 'settings.html'),
       },
     },
   },

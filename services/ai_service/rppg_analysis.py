@@ -48,36 +48,47 @@ def analyze_rppg_video_bytes(video_bytes: bytes, filename: str, media_dir: str) 
         except Exception:
             pass
 
-    if result is None:
+    if not isinstance(result, dict):
         raise ValueError(
             "Could not detect a clear pulse signal from the video. "
             "Please try again with better lighting and keep your face steady."
         )
 
-    bpm = float(result.get("hr") or 0.0)
-    sqi = float(result.get("SQI") or 0.0)
-    hrv = result.get("hrv") or {}
+    hr_val = result.get("hr")
+    sqi_val = result.get("SQI")
+    bpm = float(hr_val) if hr_val is not None else 0.0
+    sqi = float(sqi_val) if sqi_val is not None else 0.0
+    hrv = result.get("hrv") if isinstance(result.get("hrv"), dict) else {}
 
-    raw_bvp = list(raw_bvp) if raw_bvp is not None else []
-    timestamps = list(timestamps) if timestamps is not None else []
+    raw_bvp = list(raw_bvp) if hasattr(raw_bvp, '__len__') else []
+    timestamps = list(timestamps) if hasattr(timestamps, '__len__') else []
 
     plt, _ = _lazy_imports()
     plot_name = f"rppg-{uuid4().hex}.png"
     plot_path = media_root / plot_name
 
-    fig = plt.figure(figsize=(10, 4))
-    if len(raw_bvp) > 0 and len(timestamps) > 0:
-        plt.plot(timestamps, raw_bvp, color="#E4506D", linewidth=1.4)
-    else:
-        plt.text(0.5, 0.5, "Insufficient signal data", ha="center", va="center",
-                 transform=fig.transFigure, fontsize=14, color="#999")
-    plt.title("Bhumi Camera Wellness Check - Raw BVP")
-    plt.xlabel("Time (seconds)")
-    plt.ylabel("BVP amplitude")
-    plt.grid(True, alpha=0.25)
-    plt.tight_layout()
-    plt.savefig(plot_path, dpi=160)
-    plt.close(fig)
+    import sys
+    old_limit = sys.getrecursionlimit()
+    sys.setrecursionlimit(max(old_limit, 10000))
+    try:
+        fig, ax = plt.subplots(figsize=(10, 4))
+        if len(raw_bvp) > 0 and len(timestamps) > 0:
+            ax.plot(timestamps, raw_bvp, color="#E4506D", linewidth=1.4)
+        else:
+            ax.text(0.5, 0.5, "Insufficient signal data", ha="center", va="center",
+                    transform=ax.transAxes, fontsize=14, color="#999")
+        ax.set_title("Bhumi Camera Wellness Check - Raw BVP")
+        ax.set_xlabel("Time (seconds)")
+        ax.set_ylabel("BVP amplitude")
+        ax.grid(True, alpha=0.25)
+        try:
+            fig.tight_layout()
+        except RecursionError:
+            pass
+        fig.savefig(plot_path, dpi=160)
+        plt.close(fig)
+    finally:
+        sys.setrecursionlimit(old_limit)
 
     return {
         "bpm": bpm,

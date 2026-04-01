@@ -193,16 +193,34 @@ export function RppgCaptureCard({
 
       {result ? (
         <div className="mt-3 space-y-3">
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             <div className="rounded-2xl bg-white/70 p-3 shadow-soft ring-1 ring-black/5">
               <p className="text-xs font-bold tracking-wide text-ink/60">Estimated pulse</p>
               <p className="mt-1 text-2xl font-extrabold tracking-tight text-ink">{Math.round(result.bpm)} BPM</p>
             </div>
             <div className="rounded-2xl bg-white/70 p-3 shadow-soft ring-1 ring-black/5">
               <p className="text-xs font-bold tracking-wide text-ink/60">Signal quality</p>
-              <p className="mt-1 text-2xl font-extrabold tracking-tight text-ink">{result.sqi.toFixed(2)}</p>
+              <p className={`mt-1 text-2xl font-extrabold tracking-tight ${result.match_pct >= 65 ? 'text-emerald-600' : result.match_pct >= 40 ? 'text-amber-600' : 'text-rose-600'}`}>
+                {result.quality_label}
+              </p>
+            </div>
+            <div className="rounded-2xl bg-white/70 p-3 shadow-soft ring-1 ring-black/5">
+              <p className="text-xs font-bold tracking-wide text-ink/60">Match</p>
+              <p className={`mt-1 text-2xl font-extrabold tracking-tight ${result.match_pct >= 65 ? 'text-emerald-600' : result.match_pct >= 40 ? 'text-amber-600' : 'text-rose-600'}`}>
+                {result.match_pct}%
+              </p>
             </div>
           </div>
+
+          {result.quality_issues.length > 0 && (
+            <div className="rounded-2xl bg-amber-50 p-3 shadow-soft ring-1 ring-amber-200/60">
+              <p className="text-sm font-bold text-amber-800">Tips to improve</p>
+              <ul className="mt-1 list-disc pl-4 text-sm text-amber-700">
+                {result.quality_issues.map((issue, i) => <li key={i}>{issue}</li>)}
+              </ul>
+            </div>
+          )}
+
           <p className="text-sm text-ink/70">{result.note}</p>
           <p className="text-xs text-ink/55">{result.medical_notice}</p>
           <img src={result.plot_url} alt="Raw BVP signal" className="w-full rounded-2xl bg-white object-cover ring-1 ring-black/5" />

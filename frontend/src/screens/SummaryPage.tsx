@@ -5,7 +5,7 @@ import { AuthPanel } from '../ui/AuthPanel'
 import { Card } from '../ui/Card'
 import { PressableButton } from '../ui/Pressable'
 import { SparkleSticker } from '../ui/stickers'
-import { getWeeklyReport, type AppSession, type WeeklyReport } from '../lib/api'
+import { getWeeklyReport, generatePdfReport, type AppSession, type WeeklyReport } from '../lib/api'
 import { getStoredSession } from '../lib/session'
 
 
@@ -14,6 +14,8 @@ export function SummaryPage() {
   const [loading, setLoading] = useState(true)
   const [report, setReport] = useState<WeeklyReport | null>(null)
   const [error, setError] = useState('')
+  const [pdfBusy, setPdfBusy] = useState(false)
+  const [pdfUrl, setPdfUrl] = useState('')
   const barsRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -136,6 +138,42 @@ export function SummaryPage() {
               {item}
             </PressableButton>
           ))}
+        </div>
+      </Card>
+
+      <Card>
+        <p className="text-lg font-extrabold tracking-tight text-ink">Wellness report</p>
+        <p className="mt-1 text-sm text-ink/60">Generate a PDF wellness report to share with family or doctor.</p>
+        <div className="mt-3 grid gap-2">
+          <PressableButton
+            size="lg"
+            variant="primary"
+            disabled={pdfBusy}
+            onClick={() => {
+              if (!session) return
+              ;(async () => {
+                try {
+                  setPdfBusy(true)
+                  setPdfUrl('')
+                  const res = await generatePdfReport(session.user_id)
+                  setPdfUrl(res.pdf_url)
+                } catch (e: unknown) {
+                  setError((e as { message?: string } | undefined)?.message || 'Could not generate report')
+                } finally {
+                  setPdfBusy(false)
+                }
+              })()
+            }}
+          >
+            {pdfBusy ? 'Generating report...' : 'Generate PDF report'}
+          </PressableButton>
+          {pdfUrl && (
+            <a href={pdfUrl} target="_blank" rel="noopener noreferrer">
+              <PressableButton size="lg" variant="soft">
+                Open PDF report
+              </PressableButton>
+            </a>
+          )}
         </div>
       </Card>
     </AppShell>

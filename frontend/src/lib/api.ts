@@ -138,6 +138,9 @@ export type RppgAnalysis = {
   timestamps: number[]
   plot_url: string
   note: string
+  quality_label: string
+  match_pct: number
+  quality_issues: string[]
   medical_notice: string
 }
 
