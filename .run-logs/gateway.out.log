@@ -1,5 +1,0 @@
-INFO:     127.0.0.1:60563 - "GET /health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56309 - "POST /voice HTTP/1.1" 200 OK
-INFO:     127.0.0.1:61383 - "POST /report/analyze HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59185 - "POST /whatsapp/test HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57785 - "GET /report/weekly/demo HTTP/1.1" 200 OK

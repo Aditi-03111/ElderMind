@@ -1,2 +1,0 @@
-"""ElderMind backend package."""
-
