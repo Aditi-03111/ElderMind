@@ -3,26 +3,17 @@ export type SpeechSupport = {
   tts: boolean
 }
 
-type SpeechRecognitionCtor = new () => SpeechRecognitionLike
+/* eslint-disable @typescript-eslint/no-explicit-any */
+type AnySpeechRecognition = any
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
-type SpeechRecognitionLike = {
-  lang: string
-  interimResults: boolean
-  maxAlternatives: number
-  start: () => void
-  stop: () => void
-  onresult: ((event: unknown) => void) | null
-  onerror: ((event: unknown) => void) | null
-  onend: (() => void) | null
-}
-
-type SpeechRecognitionResultEventLike = {
-  results?: ArrayLike<ArrayLike<{ transcript?: string }>>
+function getSR(): (new () => AnySpeechRecognition) | null {
+  const w = window as Record<string, unknown>
+  return (w.SpeechRecognition || w.webkitSpeechRecognition || null) as (new () => AnySpeechRecognition) | null
 }
 
 export function getSpeechSupport(): SpeechSupport {
-  const w = window as unknown as { SpeechRecognition?: SpeechRecognitionCtor; webkitSpeechRecognition?: SpeechRecognitionCtor }
-  const stt = typeof window !== 'undefined' && Boolean(w.SpeechRecognition || w.webkitSpeechRecognition)
+  const stt = typeof window !== 'undefined' && getSR() !== null
   const tts = typeof window !== 'undefined' && 'speechSynthesis' in window
   return { stt, tts }
 }
@@ -100,8 +91,7 @@ export function listenOnce({
   silenceMs?: number
 }): Promise<{ transcript: string }> {
   return new Promise((resolve, reject) => {
-    const w = window as unknown as { SpeechRecognition?: SpeechRecognitionCtor; webkitSpeechRecognition?: SpeechRecognitionCtor }
-    const SR = w.SpeechRecognition || w.webkitSpeechRecognition
+    const SR = getSR()
     if (!SR) return reject(new Error('SpeechRecognition not supported in this browser'))
 
     const rec = new SR()
@@ -114,7 +104,9 @@ export function listenOnce({
     let transcript = ''
     let silenceTimer = -1
 
-    const done = (fn: () => void) => {
+    const log = (...args: unknown[]) => console.log('[Bhumi STT]', ...args)
+
+    const finish = (fn: () => void) => {
       if (settled) return
       settled = true
       window.clearTimeout(hardStop)
@@ -123,58 +115,75 @@ export function listenOnce({
       fn()
     }
 
-    // --- Hard stop: 15s max no matter what ---
+    // --- Hard stop: 15s max ---
     const hardStop = window.setTimeout(() => {
-      done(() => {
+      log('Hard stop reached', { transcript })
+      finish(() => {
         if (transcript.trim()) resolve({ transcript: transcript.trim() })
         else reject(new Error('Listening timed out'))
       })
     }, timeoutMs)
 
-    // --- Start silence timer (resets on every speech result) ---
-    const startSilenceTimer = () => {
+    // --- Silence timer: resets every time speech is detected ---
+    const resetSilenceTimer = () => {
       window.clearTimeout(silenceTimer)
       silenceTimer = window.setTimeout(() => {
-        done(() => {
+        log('Silence timer fired', { transcript })
+        finish(() => {
           if (transcript.trim()) resolve({ transcript: transcript.trim() })
           else reject(new Error('No speech detected'))
         })
       }, silenceMs)
     }
 
-    // Start the initial silence timer immediately
-    startSilenceTimer()
+    // Start initial silence timer
+    resetSilenceTimer()
 
-    rec.onresult = (event: unknown) => {
-      const ev = event as SpeechRecognitionResultEventLike
-      const results = ev?.results
-      if (!results?.length) return
-      // Collect all results into one transcript
+    rec.onresult = (event: AnySpeechRecognition) => {
+      const results = event.results
+      log('onresult fired', { resultCount: results?.length })
+      if (!results || !results.length) return
+      // Build full transcript from all results — use simple bracket access
       let full = ''
       for (let i = 0; i < results.length; i++) {
         const alt = results[i]?.[0]
         if (alt?.transcript) full += alt.transcript
       }
+      log('Parsed transcript:', full)
       if (full) transcript = full
-      // User is speaking — reset silence timer
-      startSilenceTimer()
+      resetSilenceTimer()
     }
 
-    rec.onerror = (e: unknown) => {
-      const msg = (e as { error?: string } | undefined)?.error || 'Speech recognition error'
-      if (msg === 'no-speech' || msg === 'aborted') return
-      done(() => reject(new Error(msg)))
+    rec.onaudiostart = () => log('Audio capture started')
+    rec.onsoundstart = () => log('Sound detected')
+    rec.onspeechstart = () => log('Speech detected')
+    rec.onspeechend = () => log('Speech ended')
+
+    rec.onerror = (e: AnySpeechRecognition) => {
+      const msg = e?.error || 'Speech recognition error'
+      log('onerror:', msg)
+      // Non-fatal errors — keep listening
+      if (msg === 'no-speech' || msg === 'aborted' || msg === 'network') return
+      finish(() => reject(new Error(msg)))
     }
 
     rec.onend = () => {
-      // continuous mode ended unexpectedly — restart if we're still listening
+      log('onend fired', { settled, transcript })
       if (settled) return
-      try { rec.start() } catch { /* give up */ }
+      // Browser killed recognition — restart
+      try {
+        rec.start()
+        log('Restarted after onend')
+      } catch (err) {
+        log('Failed to restart:', err)
+      }
     }
 
     try {
       rec.start()
+      log('Started', { lang, timeoutMs, silenceMs })
     } catch (e: unknown) {
+      log('Failed to start:', e)
       window.clearTimeout(hardStop)
       window.clearTimeout(silenceTimer)
       reject(e)
