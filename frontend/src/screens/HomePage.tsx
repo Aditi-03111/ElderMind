@@ -466,11 +466,11 @@ export function HomePage() {
       let transcript = ''
       let audioBlob: Blob | undefined
       try {
-        const heard = await listenOnce({ lang: browserLang(profile), timeoutMs: 9000 })
+        const heard = await listenOnce({ lang: browserLang(profile), timeoutMs: 30000, pauseMs: 4000 })
         transcript = heard.transcript
       } catch (err: any) {
         if (err.message && err.message.includes('not supported')) {
-          audioBlob = await recordOnce(9000)
+          audioBlob = await recordOnce(30000)
         } else {
           throw err
         }
@@ -488,7 +488,7 @@ export function HomePage() {
     setError('')
     try {
       setWakeBusy(true)
-      const heard = await listenOnce({ lang: browserLang(profile), timeoutMs: 12000 })
+      const heard = await listenOnce({ lang: browserLang(profile), timeoutMs: 30000 })
       const transcript = heard.transcript.trim()
       const wakeEnabled = profile?.settings?.wake_word_enabled !== false
       let command = transcript
@@ -498,7 +498,7 @@ export function HomePage() {
         }
         command = stripWakeWords(transcript, wakeWords)
         if (!command && profile?.settings?.auto_send_on_pause !== false) {
-          const followUp = await listenOnce({ lang: browserLang(profile), timeoutMs: 9000 })
+          const followUp = await listenOnce({ lang: browserLang(profile), timeoutMs: 30000 })
           command = followUp.transcript.trim()
         }
       }

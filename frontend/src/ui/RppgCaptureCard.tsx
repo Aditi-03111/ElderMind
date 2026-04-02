@@ -197,10 +197,16 @@ export function RppgCaptureCard({
 
       {result ? (
         <div className="mt-3 space-y-3">
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <div className="rounded-2xl bg-white/70 p-3 shadow-soft ring-1 ring-black/5">
               <p className="text-xs font-bold tracking-wide text-ink/60">Estimated pulse</p>
               <p className="mt-1 text-2xl font-extrabold tracking-tight text-ink">{Math.round(result.bpm)} BPM</p>
+            </div>
+            <div className="rounded-2xl bg-white/70 p-3 shadow-soft ring-1 ring-black/5">
+              <p className="text-xs font-bold tracking-wide text-ink/60">SpO2</p>
+              <p className={`mt-1 text-2xl font-extrabold tracking-tight ${result.spo2 >= 95 ? 'text-emerald-600' : result.spo2 >= 90 ? 'text-amber-600' : 'text-rose-600'}`}>
+                {result.spo2 > 0 ? `${result.spo2}%` : '—'}
+              </p>
             </div>
             <div className="rounded-2xl bg-white/70 p-3 shadow-soft ring-1 ring-black/5">
               <p className="text-xs font-bold tracking-wide text-ink/60">Signal quality</p>

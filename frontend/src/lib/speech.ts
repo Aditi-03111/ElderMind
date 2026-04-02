@@ -92,8 +92,8 @@ export async function playAudioUrl(url: string): Promise<void> {
 
 export function listenOnce({
   lang = 'en-IN',
-  timeoutMs = 9000,
-  pauseMs = 5000,
+  timeoutMs = 30000,
+  pauseMs = 4000,
 }: {
   lang?: string
   timeoutMs?: number
@@ -109,42 +109,45 @@ export function listenOnce({
     rec.interimResults = true
     rec.maxAlternatives = 1
 
-    let done = false
+    let settled = false
     let transcript = ''
-    let startedAt = 0
-    let retried = false
-    const finish = (fn: () => void) => {
-      if (done) return
-      done = true
-      try {
-        rec.stop()
-      } catch {
-        // ignore
-      }
-      fn()
+    let hasSpoken = false
+
+    const cleanup = () => {
+      window.clearTimeout(totalTimer)
+      window.clearTimeout(pauseTimer)
+      try { rec.stop() } catch { /* ignore */ }
     }
 
+    const succeed = () => {
+      if (settled) return
+      settled = true
+      cleanup()
+      resolve({ transcript: transcript.trim() })
+    }
+
+    const fail = (msg: string) => {
+      if (settled) return
+      settled = true
+      cleanup()
+      reject(new Error(msg))
+    }
+
+    // Hard stop after timeoutMs no matter what
     const totalTimer = window.setTimeout(() => {
-      finish(() => reject(new Error('Listening timed out')))
+      if (transcript.trim()) succeed()
+      else fail('Listening timed out')
     }, timeoutMs)
 
-    let pauseTimer = window.setTimeout(() => {
-      finish(() =>
-        transcript.trim()
-          ? resolve({ transcript: transcript.trim() })
-          : reject(new Error('Listening timed out')),
-      )
-    }, pauseMs)
-
+    // Pause timer — resolves after silence once user has spoken
+    let pauseTimer = -1
     const resetPauseTimer = () => {
       window.clearTimeout(pauseTimer)
-      pauseTimer = window.setTimeout(() => {
-        finish(() =>
-          transcript.trim()
-            ? resolve({ transcript: transcript.trim() })
-            : reject(new Error('Listening timed out')),
-        )
-      }, pauseMs)
+      if (hasSpoken) {
+        pauseTimer = window.setTimeout(() => {
+          if (transcript.trim()) succeed()
+        }, pauseMs)
+      }
     }
 
     rec.onresult = (event: unknown) => {
@@ -153,46 +156,43 @@ export function listenOnce({
       if (!results?.length) return
       const lastResult = results[results.length - 1]
       const nextTranscript = lastResult?.[0]?.transcript?.toString?.() || ''
-      if (nextTranscript) transcript = nextTranscript
+      if (nextTranscript) {
+        transcript = nextTranscript
+        hasSpoken = true
+      }
       resetPauseTimer()
     }
+
     rec.onerror = (e: unknown) => {
       const msg = (e as { error?: string } | undefined)?.error || 'Speech recognition error'
-      // "no-speech" is not fatal — let the pause/total timers handle it
-      if (msg === 'no-speech') return
-      window.clearTimeout(totalTimer)
-      window.clearTimeout(pauseTimer)
-      finish(() => reject(new Error(msg)))
+      // These are non-fatal — keep listening
+      if (msg === 'no-speech' || msg === 'aborted') return
+      // "not-allowed" means mic permission denied — that's fatal
+      fail(msg)
     }
+
     rec.onend = () => {
-      if (done) return
-      // If recognition ended too quickly (< 1.5s) and we haven't retried, restart it
-      if (!retried && Date.now() - startedAt < 1500) {
-        retried = true
-        try {
-          rec.start()
-          startedAt = Date.now()
-          return
-        } catch {
-          // fall through to normal end handling
-        }
-      }
-      window.clearTimeout(totalTimer)
-      window.clearTimeout(pauseTimer)
-      if (transcript.trim()) {
-        finish(() => resolve({ transcript: transcript.trim() }))
+      if (settled) return
+      // Browser killed recognition — restart it to keep listening
+      // (Chrome stops after ~5-10s of silence, this keeps us alive)
+      if (transcript.trim() && hasSpoken) {
+        // User spoke and then there was silence — resolve with what we have
+        succeed()
         return
       }
-      finish(() => reject(new Error('No speech detected')))
+      // No transcript yet — restart and keep listening
+      try {
+        rec.start()
+      } catch {
+        fail('No speech detected')
+      }
     }
 
     try {
       rec.start()
-      startedAt = Date.now()
     } catch (e: unknown) {
-      window.clearTimeout(totalTimer)
-      window.clearTimeout(pauseTimer)
-      finish(() => reject(e))
+      cleanup()
+      reject(e)
     }
   })
 }

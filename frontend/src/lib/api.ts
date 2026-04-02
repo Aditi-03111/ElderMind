@@ -132,6 +132,7 @@ export type ActivitySummary = {
 export type RppgAnalysis = {
   status: 'success'
   bpm: number
+  spo2: number
   sqi: number
   hrv?: Record<string, unknown>
   raw_bvp: number[]

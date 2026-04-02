@@ -769,6 +769,7 @@ async def analyze_rppg(request: Request):
 
     plot_url = f"{settings.base_url}/media/{result['plot_file']}"
     bpm = result["bpm"]
+    spo2 = result.get("spo2", 0)
     sqi = result["sqi"]
 
     # Build detailed quality feedback
@@ -789,8 +790,9 @@ async def analyze_rppg(request: Request):
 
     match_pct = min(round(sqi * 100), 100)
 
+    spo2_text = f" Estimated SpO2: {spo2}%." if spo2 > 0 else ""
     note = (
-        f"Experimental camera wellness check estimated pulse near {round(bpm)} BPM. "
+        f"Experimental camera wellness check estimated pulse near {round(bpm)} BPM.{spo2_text} "
         f"Signal quality: {quality_label} ({match_pct}% match). This is not a medical reading."
     )
 
@@ -821,9 +823,11 @@ async def analyze_rppg(request: Request):
 
         # Share rPPG report with caretaker/family via alerts service
         try:
+            spo2_line = f"Estimated SpO2: {spo2}%\n" if spo2 > 0 else ""
             rppg_message = (
                 f"Bhumi Camera Wellness Check for user {user_id}:\n"
                 f"Estimated pulse: {round(result['bpm'])} BPM\n"
+                f"{spo2_line}"
                 f"Signal quality: {result['sqi']:.2f}\n"
                 f"{note}\n\n"
                 f"This is an experimental reading, not a medical diagnosis."
@@ -834,7 +838,7 @@ async def analyze_rppg(request: Request):
                     json={
                         "user_id": user_id,
                         "file_name": "Camera Wellness Check",
-                        "summary": f"Estimated pulse: {round(result['bpm'])} BPM, Signal quality: {result['sqi']:.2f}",
+                        "summary": f"Estimated pulse: {round(result['bpm'])} BPM{f', SpO2: {spo2}%' if spo2 > 0 else ''}, Signal quality: {result['sqi']:.2f}",
                         "advice": "This is an experimental camera reading only. Please do not use for medical decisions.",
                         "severity": 40,
                     },
@@ -845,6 +849,7 @@ async def analyze_rppg(request: Request):
     return {
         "status": "success",
         "bpm": bpm,
+        "spo2": spo2,
         "sqi": sqi,
         "hrv": result["hrv"],
         "raw_bvp": result["raw_bvp"],
