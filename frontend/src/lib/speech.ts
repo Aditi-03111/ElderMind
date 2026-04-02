@@ -165,8 +165,11 @@ export function listenOnce({
 
     rec.onend = () => {
       if (settled) return
-      // Browser killed recognition — restart to keep listening
-      try { rec.start() } catch { /* give up */ }
+      // Browser killed recognition — restart with a delay to avoid tight loop
+      window.setTimeout(() => {
+        if (settled) return
+        try { rec.start() } catch { /* give up */ }
+      }, 300)
     }
 
     try {
