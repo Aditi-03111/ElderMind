@@ -468,12 +468,9 @@ export function HomePage() {
       try {
         const heard = await listenOnce({ lang: browserLang(profile) })
         transcript = heard.transcript
-      } catch (err: any) {
-        if (err.message && err.message.includes('not supported')) {
-          audioBlob = await recordOnce(15000)
-        } else {
-          throw err
-        }
+      } catch {
+        // Browser STT failed or not supported — record audio and send to backend for ElevenLabs STT
+        audioBlob = await recordOnce(15000)
       }
       setSpeaking(false)
       await sendAssistantMessage(transcript, audioBlob)

@@ -173,7 +173,14 @@ export function listenOnce({
     rec.onerror = (e: AnySpeechRecognition) => {
       const msg = e?.error || 'Speech recognition error'
       L('⚠️ Error:', msg)
-      if (msg === 'aborted') { abortCount++; return }
+      if (msg === 'aborted') {
+        abortCount++
+        if (abortCount >= 5) {
+          L('💀 Too many aborts — browser STT is broken, falling back')
+          finish(() => reject(new Error('SpeechRecognition not supported in this browser')))
+        }
+        return
+      }
       if (msg === 'no-speech' || msg === 'network') return
       finish(() => reject(new Error(msg)))
     }
@@ -181,17 +188,22 @@ export function listenOnce({
     rec.onend = () => {
       L('🔚 onend', { settled, transcript: getFullTranscript(), abortCount })
       if (settled) return
-      // If too many aborts, wait longer before retrying
-      const delay = abortCount > 3 ? 1000 : 300
+      const text = getFullTranscript()
+      if (text) {
+        // We have speech — resolve immediately
+        L('✅ Got transcript on end:', text)
+        finish(() => resolve({ transcript: text }))
+        return
+      }
       window.setTimeout(() => {
         if (settled) return
         try {
           rec.start()
-          L('🔄 Restarted (delay:', delay, 'ms)')
+          L('🔄 Restarted')
         } catch (err) {
           L('💀 Restart failed:', err)
         }
-      }, delay)
+      }, 300)
     }
 
     try {
