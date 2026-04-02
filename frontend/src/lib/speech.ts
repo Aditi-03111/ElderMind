@@ -111,6 +111,8 @@ export function listenOnce({
 
     let done = false
     let transcript = ''
+    let startedAt = 0
+    let retried = false
     const finish = (fn: () => void) => {
       if (done) return
       done = true
@@ -155,13 +157,26 @@ export function listenOnce({
       resetPauseTimer()
     }
     rec.onerror = (e: unknown) => {
+      const msg = (e as { error?: string } | undefined)?.error || 'Speech recognition error'
+      // "no-speech" is not fatal — let the pause/total timers handle it
+      if (msg === 'no-speech') return
       window.clearTimeout(totalTimer)
       window.clearTimeout(pauseTimer)
-      const msg = (e as { error?: string } | undefined)?.error || 'Speech recognition error'
       finish(() => reject(new Error(msg)))
     }
     rec.onend = () => {
       if (done) return
+      // If recognition ended too quickly (< 1.5s) and we haven't retried, restart it
+      if (!retried && Date.now() - startedAt < 1500) {
+        retried = true
+        try {
+          rec.start()
+          startedAt = Date.now()
+          return
+        } catch {
+          // fall through to normal end handling
+        }
+      }
       window.clearTimeout(totalTimer)
       window.clearTimeout(pauseTimer)
       if (transcript.trim()) {
@@ -173,6 +188,7 @@ export function listenOnce({
 
     try {
       rec.start()
+      startedAt = Date.now()
     } catch (e: unknown) {
       window.clearTimeout(totalTimer)
       window.clearTimeout(pauseTimer)
