@@ -138,10 +138,15 @@ export function listenOnce({
       }, silenceMs)
     }
 
-    resetSilenceTimer()
+    // Don't start silence timer yet — wait for onspeechstart
+    // Hard stop at 20s catches the case where user never speaks
 
     rec.onaudiostart = () => L('🎤 Mic opened')
-    rec.onspeechstart = () => L('🗣 Speech started')
+    rec.onspeechstart = () => {
+      L('🗣 Speech started')
+      // NOW start the silence timer — not before
+      resetSilenceTimer()
+    }
     rec.onspeechend = () => L('🗣 Speech ended')
 
     rec.onresult = (event: AnySpeechRecognition) => {
