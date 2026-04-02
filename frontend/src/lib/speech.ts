@@ -96,15 +96,14 @@ export function listenOnce({
 
     const rec = new SR()
     rec.lang = lang
-    rec.continuous = true
     rec.interimResults = true
     rec.maxAlternatives = 1
 
     let settled = false
-    let transcript = ''
-    let silenceTimer = -1
+    let finalParts: string[] = []    // completed sentence chunks
+    let interimText = ''              // current in-progress chunk
 
-    const log = (...args: unknown[]) => console.log('[Bhumi STT]', ...args)
+    const getFullTranscript = () => (finalParts.join(' ') + (interimText ? ' ' + interimText : '')).trim()
 
     const finish = (fn: () => void) => {
       if (settled) return
@@ -117,20 +116,21 @@ export function listenOnce({
 
     // --- Hard stop: 15s max ---
     const hardStop = window.setTimeout(() => {
-      log('Hard stop reached', { transcript })
+      const text = getFullTranscript()
       finish(() => {
-        if (transcript.trim()) resolve({ transcript: transcript.trim() })
+        if (text) resolve({ transcript: text })
         else reject(new Error('Listening timed out'))
       })
     }, timeoutMs)
 
     // --- Silence timer: resets every time speech is detected ---
+    let silenceTimer = -1
     const resetSilenceTimer = () => {
       window.clearTimeout(silenceTimer)
       silenceTimer = window.setTimeout(() => {
-        log('Silence timer fired', { transcript })
+        const text = getFullTranscript()
         finish(() => {
-          if (transcript.trim()) resolve({ transcript: transcript.trim() })
+          if (text) resolve({ transcript: text })
           else reject(new Error('No speech detected'))
         })
       }, silenceMs)
@@ -141,49 +141,37 @@ export function listenOnce({
 
     rec.onresult = (event: AnySpeechRecognition) => {
       const results = event.results
-      log('onresult fired', { resultCount: results?.length })
       if (!results || !results.length) return
-      // Build full transcript from all results — use simple bracket access
-      let full = ''
+
+      finalParts = []
+      interimText = ''
       for (let i = 0; i < results.length; i++) {
-        const alt = results[i]?.[0]
-        if (alt?.transcript) full += alt.transcript
+        const result = results[i]
+        const text = result?.[0]?.transcript || ''
+        if (result.isFinal) {
+          finalParts.push(text)
+        } else {
+          interimText = text
+        }
       }
-      log('Parsed transcript:', full)
-      if (full) transcript = full
       resetSilenceTimer()
     }
 
-    rec.onaudiostart = () => log('Audio capture started')
-    rec.onsoundstart = () => log('Sound detected')
-    rec.onspeechstart = () => log('Speech detected')
-    rec.onspeechend = () => log('Speech ended')
-
     rec.onerror = (e: AnySpeechRecognition) => {
       const msg = e?.error || 'Speech recognition error'
-      log('onerror:', msg)
-      // Non-fatal errors — keep listening
       if (msg === 'no-speech' || msg === 'aborted' || msg === 'network') return
       finish(() => reject(new Error(msg)))
     }
 
     rec.onend = () => {
-      log('onend fired', { settled, transcript })
       if (settled) return
-      // Browser killed recognition — restart
-      try {
-        rec.start()
-        log('Restarted after onend')
-      } catch (err) {
-        log('Failed to restart:', err)
-      }
+      // Browser killed recognition — restart to keep listening
+      try { rec.start() } catch { /* give up */ }
     }
 
     try {
       rec.start()
-      log('Started', { lang, timeoutMs, silenceMs })
     } catch (e: unknown) {
-      log('Failed to start:', e)
       window.clearTimeout(hardStop)
       window.clearTimeout(silenceTimer)
       reject(e)
