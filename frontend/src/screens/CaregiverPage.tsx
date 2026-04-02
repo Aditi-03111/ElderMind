@@ -12,6 +12,7 @@ import {
   createManagedElder,
   deleteCaretakerLogin,
   deleteReport,
+  generatePdfReport,
   getSupportWorkspace,
   postVoice,
   resetParentPassword,
@@ -177,6 +178,8 @@ export function CaregiverPage() {
   const [supportActionBusy, setSupportActionBusy] = useState('')
   const [whatsAppBusy, setWhatsAppBusy] = useState(false)
   const [reportBusy, setReportBusy] = useState(false)
+  const [pdfBusy, setPdfBusy] = useState(false)
+  const [pdfUrl, setPdfUrl] = useState('')
 
   const [openSection, setOpenSection] = useState<string | null>(null)
   const toggle = (s: string) => setOpenSection((prev) => (prev === s ? null : s))
@@ -1138,6 +1141,36 @@ export function CaregiverPage() {
                 />
                 {reportBusy ? 'Scanning report...' : 'Choose or capture report image'}
               </label>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                <PressableButton
+                  variant="primary"
+                  size="lg"
+                  disabled={pdfBusy}
+                  onClick={() => {
+                    if (!active?.user?.user_id) return
+                    ;(async () => {
+                      try {
+                        setPdfBusy(true)
+                        setPdfUrl('')
+                        setError('')
+                        const res = await generatePdfReport(active.user.user_id)
+                        setPdfUrl(res.pdf_url)
+                      } catch (e: unknown) {
+                        setError((e as { message?: string } | undefined)?.message || 'Could not generate PDF report')
+                      } finally {
+                        setPdfBusy(false)
+                      }
+                    })()
+                  }}
+                >
+                  {pdfBusy ? 'Generating PDF...' : 'Generate PDF report'}
+                </PressableButton>
+                {pdfUrl && (
+                  <a href={pdfUrl} target="_blank" rel="noopener noreferrer">
+                    <PressableButton variant="soft" size="lg">Open PDF report</PressableButton>
+                  </a>
+                )}
+              </div>
               <div className="mt-2 space-y-2">
                 {(active.reports || []).map((report) => (
                   <div key={report.id} className="rounded-2xl bg-white/70 p-2.5 shadow-soft ring-1 ring-black/5">

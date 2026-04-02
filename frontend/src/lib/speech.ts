@@ -92,12 +92,12 @@ export async function playAudioUrl(url: string): Promise<void> {
 
 export function listenOnce({
   lang = 'en-IN',
-  timeoutMs = 30000,
-  pauseMs = 4000,
+  timeoutMs = 15000,
+  silenceMs = 7000,
 }: {
   lang?: string
   timeoutMs?: number
-  pauseMs?: number
+  silenceMs?: number
 }): Promise<{ transcript: string }> {
   return new Promise((resolve, reject) => {
     const w = window as unknown as { SpeechRecognition?: SpeechRecognitionCtor; webkitSpeechRecognition?: SpeechRecognitionCtor }
@@ -106,92 +106,77 @@ export function listenOnce({
 
     const rec = new SR()
     rec.lang = lang
+    rec.continuous = true
     rec.interimResults = true
     rec.maxAlternatives = 1
 
     let settled = false
     let transcript = ''
-    let hasSpoken = false
+    let silenceTimer = -1
 
-    const cleanup = () => {
-      window.clearTimeout(totalTimer)
-      window.clearTimeout(pauseTimer)
+    const done = (fn: () => void) => {
+      if (settled) return
+      settled = true
+      window.clearTimeout(hardStop)
+      window.clearTimeout(silenceTimer)
       try { rec.stop() } catch { /* ignore */ }
+      fn()
     }
 
-    const succeed = () => {
-      if (settled) return
-      settled = true
-      cleanup()
-      resolve({ transcript: transcript.trim() })
-    }
-
-    const fail = (msg: string) => {
-      if (settled) return
-      settled = true
-      cleanup()
-      reject(new Error(msg))
-    }
-
-    // Hard stop after timeoutMs no matter what
-    const totalTimer = window.setTimeout(() => {
-      if (transcript.trim()) succeed()
-      else fail('Listening timed out')
+    // --- Hard stop: 15s max no matter what ---
+    const hardStop = window.setTimeout(() => {
+      done(() => {
+        if (transcript.trim()) resolve({ transcript: transcript.trim() })
+        else reject(new Error('Listening timed out'))
+      })
     }, timeoutMs)
 
-    // Pause timer — resolves after silence once user has spoken
-    let pauseTimer = -1
-    const resetPauseTimer = () => {
-      window.clearTimeout(pauseTimer)
-      if (hasSpoken) {
-        pauseTimer = window.setTimeout(() => {
-          if (transcript.trim()) succeed()
-        }, pauseMs)
-      }
+    // --- Start silence timer (resets on every speech result) ---
+    const startSilenceTimer = () => {
+      window.clearTimeout(silenceTimer)
+      silenceTimer = window.setTimeout(() => {
+        done(() => {
+          if (transcript.trim()) resolve({ transcript: transcript.trim() })
+          else reject(new Error('No speech detected'))
+        })
+      }, silenceMs)
     }
+
+    // Start the initial silence timer immediately
+    startSilenceTimer()
 
     rec.onresult = (event: unknown) => {
       const ev = event as SpeechRecognitionResultEventLike
       const results = ev?.results
       if (!results?.length) return
-      const lastResult = results[results.length - 1]
-      const nextTranscript = lastResult?.[0]?.transcript?.toString?.() || ''
-      if (nextTranscript) {
-        transcript = nextTranscript
-        hasSpoken = true
+      // Collect all results into one transcript
+      let full = ''
+      for (let i = 0; i < results.length; i++) {
+        const alt = results[i]?.[0]
+        if (alt?.transcript) full += alt.transcript
       }
-      resetPauseTimer()
+      if (full) transcript = full
+      // User is speaking — reset silence timer
+      startSilenceTimer()
     }
 
     rec.onerror = (e: unknown) => {
       const msg = (e as { error?: string } | undefined)?.error || 'Speech recognition error'
-      // These are non-fatal — keep listening
       if (msg === 'no-speech' || msg === 'aborted') return
-      // "not-allowed" means mic permission denied — that's fatal
-      fail(msg)
+      done(() => reject(new Error(msg)))
     }
 
     rec.onend = () => {
+      // continuous mode ended unexpectedly — restart if we're still listening
       if (settled) return
-      // Browser killed recognition — restart it to keep listening
-      // (Chrome stops after ~5-10s of silence, this keeps us alive)
-      if (transcript.trim() && hasSpoken) {
-        // User spoke and then there was silence — resolve with what we have
-        succeed()
-        return
-      }
-      // No transcript yet — restart and keep listening
-      try {
-        rec.start()
-      } catch {
-        fail('No speech detected')
-      }
+      try { rec.start() } catch { /* give up */ }
     }
 
     try {
       rec.start()
     } catch (e: unknown) {
-      cleanup()
+      window.clearTimeout(hardStop)
+      window.clearTimeout(silenceTimer)
       reject(e)
     }
   })
