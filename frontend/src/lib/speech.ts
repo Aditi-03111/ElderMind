@@ -45,20 +45,28 @@ export function stopSpeaking() {
 export async function playAudioUrl(url: string): Promise<void> {
   const a = new Audio(url)
   a.preload = 'auto'
-  a.crossOrigin = 'anonymous'
   await new Promise<void>((resolve, reject) => {
-    const done = () => {
+    let settled = false
+    const cleanup = () => {
       a.removeEventListener('canplaythrough', onReady)
       a.removeEventListener('error', onError)
+      clearTimeout(timer)
+    }
+    const done = () => {
+      if (settled) return
+      settled = true
+      cleanup()
       resolve()
     }
     const fail = (message: string) => {
-      a.removeEventListener('canplaythrough', onReady)
-      a.removeEventListener('error', onError)
+      if (settled) return
+      settled = true
+      cleanup()
       reject(new Error(message))
     }
     const onReady = () => done()
     const onError = () => fail('Audio could not be loaded')
+    const timer = setTimeout(() => fail('Audio load timed out'), 8000)
     a.addEventListener('canplaythrough', onReady, { once: true })
     a.addEventListener('error', onError, { once: true })
     a.load()
