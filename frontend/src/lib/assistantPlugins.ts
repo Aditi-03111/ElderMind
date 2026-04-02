@@ -14,6 +14,21 @@ export type AssistantPlugin = {
   run: (text: string) => AssistantPluginResult
 }
 
+function toLocalIso(date: Date) {
+  const pad = (value: number) => String(Math.abs(Math.trunc(value))).padStart(2, '0')
+  const year = date.getFullYear()
+  const month = pad(date.getMonth() + 1)
+  const day = pad(date.getDate())
+  const hours = pad(date.getHours())
+  const minutes = pad(date.getMinutes())
+  const seconds = pad(date.getSeconds())
+  const offsetMinutes = -date.getTimezoneOffset()
+  const sign = offsetMinutes >= 0 ? '+' : '-'
+  const tzHours = pad(Math.floor(Math.abs(offsetMinutes) / 60))
+  const tzMinutes = pad(Math.abs(offsetMinutes) % 60)
+  return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}${sign}${tzHours}:${tzMinutes}`
+}
+
 export function parseAlarmTime(text: string): { timeIso: string; label?: string } | null {
   const lowered = text.toLowerCase()
   const match = lowered.match(/(?:alarm|remind(?: me)?|wake me|अलार्म|रिमाइंड)(?:.*?)(?:for|at|on)?\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm|baje| बजे)?/)
@@ -32,7 +47,7 @@ export function parseAlarmTime(text: string): { timeIso: string; label?: string 
   when.setHours(hour, minute, 0, 0)
   if (when.getTime() <= now.getTime()) when.setDate(when.getDate() + 1)
   return {
-    timeIso: when.toISOString(),
+    timeIso: toLocalIso(when),
     label: text.trim(),
   }
 }

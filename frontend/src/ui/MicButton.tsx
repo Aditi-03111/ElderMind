@@ -85,12 +85,12 @@ export function MicButton({
         <div
           ref={ringRef}
           className={[
-            'absolute inset-0 rounded-full',
+            'pointer-events-none absolute inset-0 rounded-full',
             speaking ? 'ring-4 ring-mint/60' : 'ring-2 ring-sky/40',
           ].join(' ')}
         />
 
-        <div ref={waveRef} className="absolute inset-0 opacity-80">
+        <div ref={waveRef} className="pointer-events-none absolute inset-0 opacity-80">
           <span className="absolute inset-0 rounded-full border-2 border-mint/40" />
           <span className="absolute inset-0 rounded-full border-2 border-mint/30" />
           <span className="absolute inset-0 rounded-full border-2 border-mint/25" />

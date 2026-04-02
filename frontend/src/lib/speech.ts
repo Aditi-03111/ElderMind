@@ -42,8 +42,20 @@ export function stopSpeaking() {
   window.speechSynthesis.cancel()
 }
 
+let _currentAudio: HTMLAudioElement | null = null
+
+export function stopAudioPlayback() {
+  if (_currentAudio) {
+    _currentAudio.pause()
+    _currentAudio.currentTime = 0
+    _currentAudio = null
+  }
+}
+
 export async function playAudioUrl(url: string): Promise<void> {
+  stopAudioPlayback()
   const a = new Audio(url)
+  _currentAudio = a
   a.preload = 'auto'
   await new Promise<void>((resolve, reject) => {
     let settled = false
@@ -71,7 +83,11 @@ export async function playAudioUrl(url: string): Promise<void> {
     a.addEventListener('error', onError, { once: true })
     a.load()
   })
-  await a.play()
+  await new Promise<void>((resolve) => {
+    a.onended = () => { _currentAudio = null; resolve() }
+    a.onpause = () => { resolve() }
+    a.play().catch(() => { _currentAudio = null; resolve() })
+  })
 }
 
 export function listenOnce({

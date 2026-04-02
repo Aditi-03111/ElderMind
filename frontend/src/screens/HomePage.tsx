@@ -9,7 +9,7 @@ import { ElderSticker, SparkleSticker } from '../ui/stickers'
 import { includesWakeWord, parseAlarmTime, runAssistantPlugin, stripWakeWords } from '../lib/assistantPlugins'
 import { addConversationHistory, createAlarm, deleteAlarm, getAlarms, getConversationHistory, getUserProfile, postVoice, postVoiceAudio, sendSos, callContact, updateActivityStatus, type AlarmItem, type AppSession, type ConversationItem, type UserProfile } from '../lib/api'
 import { notify, playAlarmTone } from '../lib/notifications'
-import { listenOnce, playAudioUrl, speak, stopSpeaking } from '../lib/speech'
+import { listenOnce, playAudioUrl, speak, stopSpeaking, stopAudioPlayback } from '../lib/speech'
 import { clearStoredSession, getStoredSession } from '../lib/session'
 
 
@@ -59,6 +59,7 @@ export function HomePage() {
   const [history, setHistory] = useState<ConversationItem[]>([])
   const [speaking, setSpeaking] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [playing, setPlaying] = useState(false)
   const [wakeBusy, setWakeBusy] = useState(false)
   const [lastUser, setLastUser] = useState('')
   const [lastBot, setLastBot] = useState('')
@@ -422,20 +423,27 @@ export function HomePage() {
         : await postVoice({ user_id: session.user_id, text: commandText, lat: geo?.lat, lon: geo?.lon })
       setLastBot(res.text)
       setLastEmotion(`${res.mood}${res.emotion ? ` | ${res.emotion}` : ''}`)
-      if (res.audio_url) {
-        try {
-          await playAudioUrl(res.audio_url)
-        } catch {
+      setBusy(false)
+      setPlaying(true)
+      try {
+        if (res.audio_url) {
+          try {
+            await playAudioUrl(res.audio_url)
+          } catch {
+            speak(res.text, { lang: responseSpeechLang(res, profile) })
+          }
+        } else {
           speak(res.text, { lang: responseSpeechLang(res, profile) })
         }
-      } else {
-        speak(res.text, { lang: responseSpeechLang(res, profile) })
+      } finally {
+        setPlaying(false)
       }
       await afterReply(res.text)
     } catch (e: unknown) {
       setError((e as { message?: string } | undefined)?.message || 'Could not send your message')
     } finally {
       setBusy(false)
+      setPlaying(false)
     }
   }
 
@@ -446,6 +454,11 @@ export function HomePage() {
       setSpeaking(false)
       stopSpeaking()
       return
+    }
+    if (playing) {
+      stopAudioPlayback()
+      stopSpeaking()
+      setPlaying(false)
     }
 
     try {
@@ -586,7 +599,7 @@ export function HomePage() {
           </div>
         </div>
 
-        <MicButton speaking={speaking || wakeBusy} busy={busy} onToggle={runVoice} />
+        <MicButton speaking={speaking || wakeBusy || playing} busy={busy && !playing} onToggle={runVoice} />
 
         <div className="mt-3 rounded-2xl bg-white/75 p-3 shadow-soft ring-1 ring-black/5">
           <label className="text-sm font-semibold text-ink/70">Type to Bhumi</label>
@@ -596,7 +609,10 @@ export function HomePage() {
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault()
-                if (!busy && input.trim()) void sendAssistantMessage(input)
+                if (!busy && input.trim()) {
+                if (playing) { stopAudioPlayback(); stopSpeaking(); setPlaying(false) }
+                void sendAssistantMessage(input)
+              }
               }
             }}
             rows={3}
@@ -604,7 +620,10 @@ export function HomePage() {
             className="mt-2 w-full rounded-xl2 border-0 bg-white px-3 py-3 text-base shadow-soft ring-1 ring-black/5"
           />
           <div className="mt-2 flex gap-2">
-            <PressableButton variant="primary" onClick={() => void sendAssistantMessage(input)} disabled={busy || !input.trim()}>
+            <PressableButton variant="primary" onClick={() => {
+              if (playing) { stopAudioPlayback(); stopSpeaking(); setPlaying(false) }
+              void sendAssistantMessage(input)
+            }} disabled={(busy && !playing) || !input.trim()}>
               Send Text
             </PressableButton>
             <PressableButton variant="soft" onClick={() => setInput('')}>

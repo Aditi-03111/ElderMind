@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef } from 'react'
 import { gsap } from 'gsap'
-import { ElderSticker, HeartPulseSticker, PillSticker, SparkleSticker } from './stickers'
+import { ElderSticker, GearSticker, HeartPulseSticker, PillSticker, SparkleSticker } from './stickers'
 import { getStoredSession } from '../lib/session'
 import type React from 'react'
 
@@ -16,12 +16,12 @@ const elderItems: NavItem[] = [
   { key: 'medication', href: '/medication.html', label: 'Meds', Icon: (p) => <PillSticker {...p} /> },
   { key: 'alert', href: '/alert.html', label: 'Health', Icon: (p) => <HeartPulseSticker {...p} /> },
   { key: 'summary', href: '/summary.html', label: 'Week', Icon: (p) => <SparkleSticker {...p} /> },
-  { key: 'settings', href: '/settings.html', label: 'Settings', Icon: (p) => <SparkleSticker {...p} /> },
+  { key: 'settings', href: '/settings.html', label: 'Settings', Icon: (p) => <GearSticker {...p} /> },
 ]
 
 const supportItems: NavItem[] = [
   { key: 'support', href: '/support.html', label: 'Dashboard', Icon: (p) => <ElderSticker {...p} tone="mint" /> },
-  { key: 'settings', href: '/settings.html', label: 'Settings', Icon: (p) => <SparkleSticker {...p} /> },
+  { key: 'settings', href: '/settings.html', label: 'Settings', Icon: (p) => <GearSticker {...p} /> },
 ]
 
 function currentKey(items: NavItem[]): string {
