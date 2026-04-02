@@ -10,7 +10,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from twilio.rest import Client as TwilioClient
 
 from .config import settings
-from services.runtime import service_request
 
 
 app = FastAPI(title="ElderMind Alerts Service", version="0.2.0")
@@ -30,9 +29,10 @@ async def health():
 
 async def _fetch_user(user_id: str) -> dict[str, Any]:
     try:
-        res = await service_request("data", "GET", f"{settings.data_service_url}/user/{user_id}", timeout=10)
-        if res.is_success:
-            return (res.json() or {}).get("user") or {}
+        async with httpx.AsyncClient(timeout=10) as client:
+            res = await client.get(f"{settings.data_service_url}/user/{user_id}")
+            if res.is_success:
+                return (res.json() or {}).get("user") or {}
     except Exception:
         pass
     return {}
@@ -40,16 +40,18 @@ async def _fetch_user(user_id: str) -> dict[str, Any]:
 
 async def _persist_alert(user_id: str, alert: dict[str, Any]) -> None:
     try:
-        await service_request("data", "POST", f"{settings.data_service_url}/alerts/{user_id}", timeout=10, json=alert)
+        async with httpx.AsyncClient(timeout=10) as client:
+            await client.post(f"{settings.data_service_url}/alerts/{user_id}", json=alert)
     except Exception:
         pass
 
 
 async def _fetch_activity(user_id: str) -> dict[str, Any]:
     try:
-        res = await service_request("data", "GET", f"{settings.data_service_url}/activity/{user_id}", timeout=10)
-        if res.is_success:
-            return (res.json() or {}).get("activity") or {}
+        async with httpx.AsyncClient(timeout=10) as client:
+            res = await client.get(f"{settings.data_service_url}/activity/{user_id}")
+            if res.is_success:
+                return (res.json() or {}).get("activity") or {}
     except Exception:
         pass
     return {}

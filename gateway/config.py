@@ -37,7 +37,6 @@ def _env(name: str, default: str | None = None) -> str | None:
 class GatewaySettings:
     cors_allow_origins: str = _env("CORS_ALLOW_ORIGINS", "*") or "*"
     gateway_port: int = int(_env("GATEWAY_PORT", "8010") or "8010")
-    single_process: bool = (_env("ELDERMIND_SINGLE_PROCESS", "0") or "0").strip().lower() in {"1", "true", "yes", "on"}
 
     ai_service_url: str = _env("AI_SERVICE_URL", "http://127.0.0.1:8001") or "http://127.0.0.1:8001"
     data_service_url: str = _env("DATA_SERVICE_URL", "http://127.0.0.1:8002") or "http://127.0.0.1:8002"

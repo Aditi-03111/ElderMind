@@ -1,15 +1,4 @@
-const configuredApiBase = import.meta.env.VITE_API_BASE?.trim()
-
-function resolveApiBase(): string {
-  if (configuredApiBase) return configuredApiBase
-  if (import.meta.env.DEV) return 'http://localhost:8010'
-
-  throw new Error(
-    'Missing VITE_API_BASE for this production build. Set it to the deployed gateway URL before deploying the frontend.',
-  )
-}
-
-export const API_BASE = resolveApiBase()
+export const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8010'
 
 export type SessionRole = 'elder' | 'support'
 

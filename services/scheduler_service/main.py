@@ -3,10 +3,10 @@ from __future__ import annotations
 import os
 import random
 
+import httpx
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
 
-from services.runtime import service_request
 
 AI_SERVICE_URL = os.getenv("AI_SERVICE_URL", "http://127.0.0.1:8001")
 DATA_SERVICE_URL = os.getenv("DATA_SERVICE_URL", "http://127.0.0.1:8002")
@@ -30,7 +30,8 @@ async def health():
 
 
 async def _post_voice(text: str) -> None:
-    await service_request("ai", "POST", f"{AI_SERVICE_URL}/voice", timeout=20, json={"user_id": "demo", "text": text})
+    async with httpx.AsyncClient(timeout=20) as client:
+        await client.post(f"{AI_SERVICE_URL}/voice", json={"user_id": "demo", "text": text})
 
 
 async def _poke_checkin():
@@ -54,18 +55,20 @@ async def _bedtime_prompt():
 
 
 async def _weekly_report_ping():
-    await service_request("data", "GET", f"{DATA_SERVICE_URL}/weekly-report/demo", timeout=20)
+    async with httpx.AsyncClient(timeout=20) as client:
+        await client.get(f"{DATA_SERVICE_URL}/weekly-report/demo")
 
 
 async def _sync_medicine_reminders():
     """Re-sync medicine reminders for all users so alarms repeat daily."""
     try:
-        users_res = await service_request("data", "GET", f"{DATA_SERVICE_URL}/users", timeout=30)
-        users = (users_res.json() or {}).get("users") or []
-        for user in users:
-            user_id = user.get("user_id") or ""
-            if user_id:
-                await service_request("data", "POST", f"{DATA_SERVICE_URL}/medicine/{user_id}/sync-reminders", timeout=30)
+        async with httpx.AsyncClient(timeout=30) as client:
+            users_res = await client.get(f"{DATA_SERVICE_URL}/users")
+            users = (users_res.json() or {}).get("users") or []
+            for user in users:
+                user_id = user.get("user_id") or ""
+                if user_id:
+                    await client.post(f"{DATA_SERVICE_URL}/medicine/{user_id}/sync-reminders")
     except Exception:
         pass
 
