@@ -83,8 +83,8 @@ export async function playAudioUrl(url: string): Promise<void> {
 
 export function listenOnce({
   lang = 'en-IN',
-  timeoutMs = 15000,
-  silenceMs = 7000,
+  timeoutMs = 20000,
+  silenceMs = 10000,
 }: {
   lang?: string
   timeoutMs?: number
@@ -100,8 +100,10 @@ export function listenOnce({
     rec.maxAlternatives = 1
 
     let settled = false
-    let finalParts: string[] = []    // completed sentence chunks
-    let interimText = ''              // current in-progress chunk
+    let finalParts: string[] = []
+    let interimText = ''
+
+    const L = (...a: unknown[]) => console.log('%c[Bhumi STT]', 'color:#3B8C6E;font-weight:bold', ...a)
 
     const getFullTranscript = () => (finalParts.join(' ') + (interimText ? ' ' + interimText : '')).trim()
 
@@ -114,21 +116,21 @@ export function listenOnce({
       fn()
     }
 
-    // --- Hard stop: 15s max ---
     const hardStop = window.setTimeout(() => {
       const text = getFullTranscript()
+      L('⏱ Hard stop 15s', { text })
       finish(() => {
         if (text) resolve({ transcript: text })
         else reject(new Error('Listening timed out'))
       })
     }, timeoutMs)
 
-    // --- Silence timer: resets every time speech is detected ---
     let silenceTimer = -1
     const resetSilenceTimer = () => {
       window.clearTimeout(silenceTimer)
       silenceTimer = window.setTimeout(() => {
         const text = getFullTranscript()
+        L('🔇 Silence 7s', { text })
         finish(() => {
           if (text) resolve({ transcript: text })
           else reject(new Error('No speech detected'))
@@ -136,12 +138,15 @@ export function listenOnce({
       }, silenceMs)
     }
 
-    // Start initial silence timer
     resetSilenceTimer()
+
+    rec.onaudiostart = () => L('🎤 Mic opened')
+    rec.onspeechstart = () => L('🗣 Speech started')
+    rec.onspeechend = () => L('🗣 Speech ended')
 
     rec.onresult = (event: AnySpeechRecognition) => {
       const results = event.results
-      if (!results || !results.length) return
+      if (!results || !results.length) { L('❌ onresult but no results'); return }
 
       finalParts = []
       interimText = ''
@@ -154,27 +159,41 @@ export function listenOnce({
           interimText = text
         }
       }
+      L('📝 Result:', { final: finalParts, interim: interimText, full: getFullTranscript() })
       resetSilenceTimer()
     }
 
+    let abortCount = 0
+
     rec.onerror = (e: AnySpeechRecognition) => {
       const msg = e?.error || 'Speech recognition error'
-      if (msg === 'no-speech' || msg === 'aborted' || msg === 'network') return
+      L('⚠️ Error:', msg)
+      if (msg === 'aborted') { abortCount++; return }
+      if (msg === 'no-speech' || msg === 'network') return
       finish(() => reject(new Error(msg)))
     }
 
     rec.onend = () => {
+      L('🔚 onend', { settled, transcript: getFullTranscript(), abortCount })
       if (settled) return
-      // Browser killed recognition — restart with a delay to avoid tight loop
+      // If too many aborts, wait longer before retrying
+      const delay = abortCount > 3 ? 1000 : 300
       window.setTimeout(() => {
         if (settled) return
-        try { rec.start() } catch { /* give up */ }
-      }, 300)
+        try {
+          rec.start()
+          L('🔄 Restarted (delay:', delay, 'ms)')
+        } catch (err) {
+          L('💀 Restart failed:', err)
+        }
+      }, delay)
     }
 
     try {
       rec.start()
+      L('🚀 Started', { lang, timeoutMs, silenceMs })
     } catch (e: unknown) {
+      L('💀 Start failed:', e)
       window.clearTimeout(hardStop)
       window.clearTimeout(silenceTimer)
       reject(e)
