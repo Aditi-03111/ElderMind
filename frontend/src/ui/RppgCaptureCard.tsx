@@ -86,6 +86,11 @@ export function RppgCaptureCard({
         audio: false,
       })
       mediaStreamRef.current = stream
+      setRecording(true)
+
+      // Wait one frame so the <video> element mounts in the DOM
+      await new Promise((r) => requestAnimationFrame(r))
+
       const video = liveVideoRef.current as HTMLVideoElement & { srcObject?: MediaStream | null }
       if (video) {
         video.srcObject = stream
@@ -112,7 +117,6 @@ export function RppgCaptureCard({
         }
       }
       recorder.start()
-      setRecording(true)
       autoStopTimerRef.current = window.setTimeout(() => {
         if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
           mediaRecorderRef.current.stop()
