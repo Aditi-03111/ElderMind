@@ -172,12 +172,28 @@ A `render.yaml` blueprint is included. To deploy:
 5. Set `BASE_URL` on `bhumi-gateway` to its Render URL (e.g. `https://bhumi-gateway.onrender.com`)
 6. Set `CORS_ALLOW_ORIGINS` to your Vercel frontend URL
 
+### Backend — Single Render Service
+
+If you want to run the whole backend in one Render web service instead of separate gateway/data/ai/alerts services, enable single-process mode:
+
+```bash
+ELDERMIND_SINGLE_PROCESS=1
+BASE_URL=https://your-backend.onrender.com
+AI_SERVICE_URL=https://your-backend.onrender.com
+DATA_SERVICE_URL=https://your-backend.onrender.com
+ALERTS_SERVICE_URL=https://your-backend.onrender.com
+CORS_ALLOW_ORIGINS=https://your-frontend.vercel.app
+```
+
+In this mode, the gateway keeps the public API, but service-to-service calls are resolved in-process so one Render app can handle login, data, AI, and alerts together.
+
 ### Frontend — Vercel
 
 1. Go to [Vercel](https://vercel.com) > **New Project**
 2. Import the repo, set **Root Directory** to `frontend`
 3. Add environment variable: `VITE_API_BASE` = your Render gateway URL
-4. Deploy
+4. Redeploy after saving the env var, because Vite inlines `VITE_*` values at build time
+5. Verify the deployed frontend is requesting `https://<your-gateway>/auth/login` instead of `http://localhost:8010/auth/login`
 
 ---
 

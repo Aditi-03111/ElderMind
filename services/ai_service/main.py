@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import settings
+from services.runtime import service_request
 from .cultural_library import build_daily_calendar, search_library
 from .emotion import infer_emotion_from_audio_bytes
 from .gemini_client import gemini_generate_text
@@ -512,12 +513,23 @@ def _parse_medicine_suggestions(raw: str, report_text: str) -> list[dict[str, An
 
 
 async def _fetch_user_context(user_id: str) -> dict[str, Any]:
-    async with httpx.AsyncClient(timeout=12) as client:
-        user_res = await client.get(f"{settings.data_service_url}/user/{user_id}")
-        meds_res = await client.get(f"{settings.data_service_url}/medicine/{user_id}")
-        conv_res = await client.get(f"{settings.data_service_url}/conversations/{user_id}", params={"limit": 12})
-        memory_res = await client.get(f"{settings.data_service_url}/memory/{user_id}", params={"limit": 12})
-        activity_res = await client.get(f"{settings.data_service_url}/activity/{user_id}")
+    user_res = await service_request("data", "GET", f"{settings.data_service_url}/user/{user_id}", timeout=12)
+    meds_res = await service_request("data", "GET", f"{settings.data_service_url}/medicine/{user_id}", timeout=12)
+    conv_res = await service_request(
+        "data",
+        "GET",
+        f"{settings.data_service_url}/conversations/{user_id}",
+        timeout=12,
+        params={"limit": 12},
+    )
+    memory_res = await service_request(
+        "data",
+        "GET",
+        f"{settings.data_service_url}/memory/{user_id}",
+        timeout=12,
+        params={"limit": 12},
+    )
+    activity_res = await service_request("data", "GET", f"{settings.data_service_url}/activity/{user_id}", timeout=12)
 
     return {
         "user": (user_res.json() or {}).get("user") or {"user_id": user_id},
@@ -596,15 +608,17 @@ RUNTIME RULES:
 
 async def _post_caretaker_alert(user_id: str, reason: str) -> None:
     try:
-        async with httpx.AsyncClient(timeout=12) as client:
-            await client.post(
-                f"{settings.alerts_service_url}/sos",
-                json={
-                    "user_id": user_id,
-                    "reason": reason,
-                    "source": "ai_service",
-                },
-            )
+        await service_request(
+            "alerts",
+            "POST",
+            f"{settings.alerts_service_url}/sos",
+            timeout=12,
+            json={
+                "user_id": user_id,
+                "reason": reason,
+                "source": "ai_service",
+            },
+        )
     except Exception:
         logger.exception("CRITICAL: Failed to send caretaker alert for user=%s reason=%s", user_id, reason)
 
@@ -796,26 +810,31 @@ async def analyze_rppg(request: Request):
 
     if user_id:
         try:
-            async with httpx.AsyncClient(timeout=12) as client:
-                await client.post(
-                    f"{settings.data_service_url}/activity/{user_id}/status",
-                    json={
-                        "status": "okay",
-                        "mood": "okay",
-                        "note": note,
-                    },
-                )
-                await client.post(
-                    f"{settings.data_service_url}/conversations/{user_id}",
-                    json={
-                        "ts": datetime.now(timezone.utc).isoformat(),
-                        "text_input": "[camera_wellness_check]",
-                        "ai_response": note,
-                        "mood": "okay",
-                        "emotion": "neutral",
-                        "source": "rppg",
-                    },
-                )
+            await service_request(
+                "data",
+                "POST",
+                f"{settings.data_service_url}/activity/{user_id}/status",
+                timeout=12,
+                json={
+                    "status": "okay",
+                    "mood": "okay",
+                    "note": note,
+                },
+            )
+            await service_request(
+                "data",
+                "POST",
+                f"{settings.data_service_url}/conversations/{user_id}",
+                timeout=12,
+                json={
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                    "text_input": "[camera_wellness_check]",
+                    "ai_response": note,
+                    "mood": "okay",
+                    "emotion": "neutral",
+                    "source": "rppg",
+                },
+            )
         except Exception:
             logger.exception("Failed to persist rPPG activity for user=%s", user_id)
 
@@ -828,17 +847,19 @@ async def analyze_rppg(request: Request):
                 f"{note}\n\n"
                 f"This is an experimental reading, not a medical diagnosis."
             )
-            async with httpx.AsyncClient(timeout=15) as client:
-                await client.post(
-                    f"{settings.alerts_service_url}/report-share",
-                    json={
-                        "user_id": user_id,
-                        "file_name": "Camera Wellness Check",
-                        "summary": f"Estimated pulse: {round(result['bpm'])} BPM, Signal quality: {result['sqi']:.2f}",
-                        "advice": "This is an experimental camera reading only. Please do not use for medical decisions.",
-                        "severity": 40,
-                    },
-                )
+            await service_request(
+                "alerts",
+                "POST",
+                f"{settings.alerts_service_url}/report-share",
+                timeout=15,
+                json={
+                    "user_id": user_id,
+                    "file_name": "Camera Wellness Check",
+                    "summary": f"Estimated pulse: {round(result['bpm'])} BPM, Signal quality: {result['sqi']:.2f}",
+                    "advice": "This is an experimental camera reading only. Please do not use for medical decisions.",
+                    "severity": 40,
+                },
+            )
         except Exception:
             logger.warning("Failed to share rPPG report with caretakers for user=%s", user_id, exc_info=True)
 
@@ -872,13 +893,18 @@ async def generate_pdf_report(user_id: str):
     report_data: dict[str, Any] = {}
     alerts: list[dict[str, Any]] = []
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            report_res = await client.get(f"{settings.data_service_url}/weekly-report/{user_id}")
-            if report_res.is_success:
-                report_data = report_res.json() or {}
-            alerts_res = await client.get(f"{settings.data_service_url}/alerts/{user_id}", params={"limit": 10})
-            if alerts_res.is_success:
-                alerts = (alerts_res.json() or {}).get("items") or []
+        report_res = await service_request("data", "GET", f"{settings.data_service_url}/weekly-report/{user_id}", timeout=15)
+        if report_res.is_success:
+            report_data = report_res.json() or {}
+        alerts_res = await service_request(
+            "data",
+            "GET",
+            f"{settings.data_service_url}/alerts/{user_id}",
+            timeout=15,
+            params={"limit": 10},
+        )
+        if alerts_res.is_success:
+            alerts = (alerts_res.json() or {}).get("items") or []
     except Exception:
         logger.warning("Could not fetch report data for PDF generation user=%s", user_id, exc_info=True)
 
@@ -1112,38 +1138,43 @@ async def voice(request: Request):
 
     memory_items = _extract_memories(user_text, profile)
     try:
-        async with httpx.AsyncClient(timeout=12) as client:
-            await client.post(
-                f"{settings.data_service_url}/conversations/{user_id}",
+        await service_request(
+            "data",
+            "POST",
+            f"{settings.data_service_url}/conversations/{user_id}",
+            timeout=12,
+            json={
+                "ts": datetime.now(timezone.utc).isoformat(),
+                "text_input": user_text,
+                "ai_response": speech_text,
+                "mood": final_mood,
+                "emotion": emotion_label,
+                "health_logs": combined_health_logs,
+                "mood_logs": [final_mood],
+                "alerts": alerts,
+                "source": "voice",
+                "context": {
+                    "weather": weather_summary,
+                    "festival": festival_today,
+                    "tithi": tithi_today,
+                },
+            },
+        )
+        for issue in alerts:
+            await service_request(
+                "data",
+                "POST",
+                f"{settings.data_service_url}/alerts/{user_id}",
+                timeout=12,
                 json={
-                    "ts": datetime.now(timezone.utc).isoformat(),
-                    "text_input": user_text,
-                    "ai_response": speech_text,
-                    "mood": final_mood,
-                    "emotion": emotion_label,
-                    "health_logs": combined_health_logs,
-                    "mood_logs": [final_mood],
-                    "alerts": alerts,
-                    "source": "voice",
-                    "context": {
-                        "weather": weather_summary,
-                        "festival": festival_today,
-                        "tithi": tithi_today,
-                    },
+                    "time_created": datetime.now(timezone.utc).isoformat(),
+                    "type": "ai_marker",
+                    "message": issue,
+                    "severity": 90 if issue in {"urgent_health", "urgent_help"} else 70,
                 },
             )
-            for issue in alerts:
-                await client.post(
-                    f"{settings.data_service_url}/alerts/{user_id}",
-                    json={
-                        "time_created": datetime.now(timezone.utc).isoformat(),
-                        "type": "ai_marker",
-                        "message": issue,
-                        "severity": 90 if issue in {"urgent_health", "urgent_help"} else 70,
-                    },
-                )
-            for memory in memory_items:
-                await client.post(f"{settings.data_service_url}/memory/{user_id}", json=memory)
+        for memory in memory_items:
+            await service_request("data", "POST", f"{settings.data_service_url}/memory/{user_id}", timeout=12, json=memory)
     except Exception:
         logger.exception("Failed to persist conversation/alerts/memories for user=%s", user_id)
 
